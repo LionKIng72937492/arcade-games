@@ -229,7 +229,7 @@ function scoreText(id) { return save.scores[id] || 0; }
 
 function renderGames() {
   $('#games').innerHTML = games.map(([id, icon, name, desc], i) =>
-    `<button class="card" style="--glow:${['#55e6ff', '#bb6cff', '#ffb257', '#ff6d91'][i % 4]}" onclick="launch('${id}')"><div class="icon">${icon}</div><h3>${name}</h3><p>${desc}</p><footer>BESTWERT <strong>${scoreText(id)}</strong> · SPIELEN →</footer></button>`
+    `<button class="card" style="--glow:${['#55e6ff', '#bb6cff', '#ffb257', '#ff6d91'][i \% 4]}" onclick="launch('${id}')"><div class="icon">${icon}</div><h3>${name}</h3><p>${desc}</p><footer>BESTWERT <strong>${scoreText(id)}</strong> · SPIELEN →</footer></button>`
   ).join('');
 }
 
@@ -376,7 +376,7 @@ if (pInput) {
 let active = '', raf = 0, last = 0, roundEnded = false, cleanup = () => { };
 function stop() { cancelAnimationFrame(raf); cleanup(); cleanup = () => { }; last = 0; }
 function loop(update, draw) { function f(t) { let dt = Math.min(.05, (t - last || t) / 1000); last = t; update(dt); draw(); if (!roundEnded) raf = requestAnimationFrame(f); } raf = requestAnimationFrame(f); }
-function canvas(w = 400, h = 520) { $('#gameUI').innerHTML = `<div class="hud" id="hud"></div><canvas width="${w}" height="${h}"></canvas><div class="controls" id="controls"><i class="empty"></i><button data-k="ArrowUp">▲</button><i class="empty"></i><button data-k="ArrowLeft">◀</button><button data-k=" ">●</button><button data-k="ArrowRight">▶</button><i class="empty"></i><button data-k="ArrowDown">▼</button><i class="empty"></i></div>`; let c = $('canvas'), x = c.getContext('2d');$('#controls').onclick = e => { let k = e.target.dataset.k; if (k) key(k); }; return [c, x]; }
+function canvas(w = 400, h = 520) { $('#gameUI').innerHTML = `<div class="hud" id="hud"></div><canvas width="${w}" height="${h}"></canvas><div class="controls" id="controls"><i class="empty"></i><button data-k="ArrowUp">▲</button><i class="empty"></i><button data-k="ArrowLeft">◀</button><button data-k=" ">●</button><button data-k="ArrowRight">▶</button><i class="empty"></i><button data-k="ArrowDown">▼</button><i class="empty"></i></div>`; let c = $('canvas'), x = c.getContext('2d'); $('#controls').onclick = e => { let k = e.target.dataset.k; if (k) key(k); }; return [c, x]; }
 function hud(s) { $('#hud').innerHTML = s; } function key(k) { window.dispatchEvent(new KeyboardEvent('keydown', { key: k })); }
 function end(title, text, score, win = false) { if (roundEnded) return; stop(); award(active, score, win); $('#modalTitle').textContent = title; $('#modalText').textContent = text; $('#modal').classList.add('show'); $('#modalRestart').onclick = () => launch(active); }
 
@@ -659,7 +659,7 @@ function space() {
 
 // 5. PONG
 function pong() {
-  $('#gameUI').innerHTML = `
+  $('#gameUI`').innerHTML = `
     <div class="mode-select-box" id="pongModeSelect">
       <h3 style="color:var(--a); margin-bottom:10px;">Spielmodus wählen</h3>
       <button class="mode-btn" id="btnVsAI">🤖 Gegen KI</button>
@@ -951,3 +951,6 @@ function rhythm() {
     hud(`SCORE <b>${score}</b> · ZIEL <b>1000</b>`);
   });
 }
+
+// 🔥 HIER WIRD RENDERGAMES BEIM START AUFGERUFEN, DAMIT ALLES SOFORT ANZEIGT WIRD:
+renderGames();
