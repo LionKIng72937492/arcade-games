@@ -1,5 +1,5 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-import { getFirestore, collection, onSnapshot, query, orderBy, limit, doc, setDoc, getDocs, where, increment } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+import { getFirestore, collection, onSnapshot, query, orderBy, limit, doc, setDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
 // FIREBASE KONFIGURATION
 const firebaseConfig = {
@@ -14,66 +14,43 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
-// OWNER KONFIGURATION
-const OWNER_NAMES = ["Asllan", "Asllan."];
-const OWNER_MAX = 999999;
-const isOwnerName = name => OWNER_NAMES.includes((name || "").trim());
-const ownerIdFor = name => (name || "").trim() === "Asllan." ? "owner_asllan_dot" : "owner_asllan";
+// HIER KANNST DU DEN OWNER-NAMEN ÄNDERN:
+const OWNER_NAME = "Asllan";
 
 let currentCategory = 'coins';
 
 // SPEICHER-DATENBANK LOGIK
 const KEY = 'neonArcade2026';
-const defaults = { 
-  coins: 0, xp: 0, time: 0, sound: true, theme: 'neon', 
-  scores: {}, unlocked: ['theme-violet'], activeTrail: 'base', 
-  activeBanner: 'banner-none', activeFont: 'font-default', 
-  playerId: '', playerName: '', lastNameChange: 0 
-};
-
+const defaults = { coins: 0, xp: 0, sound: true, theme: 'neon', scores: {}, unlocked: ['theme-violet'], activeTrail: 'base', playerId: '', playerName: '', lastNameChange: 0 };
 let save;
 try {
   save = { ...defaults, ...JSON.parse(localStorage.getItem(KEY) || '{}') };
   save.scores ??= {};
   save.unlocked ??= [];
-  save.time ??= 0;
-  save.activeBanner ??= 'banner-none';
-  save.activeFont ??= 'font-default';
 } catch {
   save = { ...defaults };
 }
 
-if (isOwnerName(save.playerName)) {
-  save.playerId = ownerIdFor(save.playerName);
-  if (!Number.isFinite(Number(save.coins)) || Number(save.coins) === 0) save.coins = OWNER_MAX;
-  if (!Number.isFinite(Number(save.xp)) || Number(save.xp) === 0) save.xp = OWNER_MAX;
-  if (!Number.isFinite(Number(save.time)) || Number(save.time) === 0) save.time = OWNER_MAX;
-}
-
+// EIN ACCOUNT PRO GERÄT (EINDEUTIGE ID)
 if (!save.playerId) {
-  save.playerId = isOwnerName(save.playerName) ? ownerIdFor(save.playerName) : 'p_' + Math.random().toString(36).substring(2, 9) + Date.now().toString(36);
+  save.playerId = 'p_' + Math.random().toString(36).substring(2, 9) + Date.now().toString(36);
 }
 window.save = save;
 
-// AUTOMATISCHES SPEICHERN IN FIREBASE
+// AUTOMATISCHES SPEICHERN IN FIREBASE (MERGED PRO GERÄT)
 async function savePlayerToFirebase() {
   if (!window.save) return;
   const name = window.save.playerName || "Anonym";
-  if (!name || name === "Du") return;
+  if (!name || name === "Du") return; 
+
   try {
-    if (isOwnerName(name)) {
-      window.save.playerId = ownerIdFor(name);
-    }
     const playerRef = doc(db, "leaderboards", window.save.playerId);
     await setDoc(playerRef, {
       playerId: window.save.playerId,
       playerName: name,
-      coins: Number(window.save.coins || 0),
-      xp: Number(window.save.xp || 0),
-      time: Number(window.save.time || 0),
-      activeBanner: window.save.activeBanner || 'banner-none',
-      activeFont: window.save.activeFont || 'font-default',
-      lastNameChange: window.save.lastNameChange || 0
+      coins: window.save.coins || 0,
+      xp: window.save.xp || 0,
+      time: Math.floor((window.save.xp || 0) / 100)
     }, { merge: true });
   } catch (err) {
     console.error("Fehler beim Speichern in Firestore:", err);
@@ -81,34 +58,13 @@ async function savePlayerToFirebase() {
 }
 window.savePlayerToFirebase = savePlayerToFirebase;
 
-let playerSyncUnsubscribe = null;
-function startPlayerRealtimeSync() {
-  if (!save.playerId || !save.playerName) return;
-  if (playerSyncUnsubscribe) playerSyncUnsubscribe();
-  const playerRef = doc(db, "leaderboards", save.playerId);
-  playerSyncUnsubscribe = onSnapshot(playerRef, (snapshot) => {
-    if (!snapshot.exists()) return;
-    const data = snapshot.data();
-    const remoteCoins = Number(data.coins ?? save.coins);
-    const remoteXp = Number(data.xp ?? save.xp);
-    const remoteTime = Number(data.time ?? save.time);
-    if (remoteCoins !== save.coins || remoteXp !== save.xp || remoteTime !== save.time) {
-      save.coins = remoteCoins;
-      save.xp = remoteXp;
-      save.time = remoteTime;
-      localStorage.setItem(KEY, JSON.stringify(save));
-      renderMeta();
-      renderShop();
-    }
-  }, (err) => console.error("Spieler-Sync Fehler:", err));
-}
-
-// RANGLISTE KATEGORIE WECHSELN
+// RANGLEISTEN KATEGORIE WECHSELN
 function switchCategory(cat) {
   currentCategory = cat;
   document.querySelectorAll('.lb-tabs button').forEach(b => b.classList.remove('active'));
   let activeBtn = document.getElementById('btn-' + cat);
   if (activeBtn) activeBtn.classList.add('active');
+
   const headers = { coins: "Münzen", xp: "Erfahrung (XP)", time: "Spielzeit (Std.)" };
   document.getElementById('score-header').innerText = headers[cat];
   loadLeaderboardData(cat);
@@ -125,21 +81,39 @@ function loadLeaderboardData(category) {
 
   onSnapshot(q, (snapshot) => {
     tbody.innerHTML = "";
-    let rank = 1;
-    snapshot.forEach((docSnap) => {
-      const data = docSnap.data();
-      const row = document.createElement('tr');
-      const rankClass = rank === 1 ? "rank-1" : rank === 2 ? "rank-2" : rank === 3 ? "rank-3" : "";
-      let scoreDisplay = Number(data[category] || 0).toLocaleString('de-CH');
-      if (category === 'xp') scoreDisplay += " XP";
-      if (category === 'time') scoreDisplay += " Std.";
-      const ownerBadge = isOwnerName(data.playerName) ? ' <span class="owner-badge">👑 OWNER</span>' : '';
-      row.innerHTML = `
-        <td class="${rankClass}">#${rank}</td>
-        <td><span class="lb-banner ${data.activeBanner || 'banner-none'}"></span>${data.playerName || 'Anonym'}${ownerBadge}</td>
-        <td class="score-val">${scoreDisplay}</td>`;
-      tbody.appendChild(row);
-      rank++;
+
+    // 👑 OWNER EINTRAG (#1 RANG)
+    let ownerRow = document.createElement('tr');
+    ownerRow.classList.add('owner-row');
+    let ownerScoreText = "999'999";
+    if (category === 'xp') ownerScoreText = "500'000 XP";
+    if (category === 'time') ownerScoreText = "250 Std.";
+
+    ownerRow.innerHTML = `
+      <td class="rank-1">#1</td>
+      <td>${OWNER_NAME} <span class="owner-badge">👑 OWNER</span></td>
+      <td class="score-val">${ownerScoreText}</td>
+    `;
+    tbody.appendChild(ownerRow);
+
+    let rank = 2;
+    snapshot.forEach((doc) => {
+      const data = doc.data();
+      if (data.playerName !== OWNER_NAME) {
+        const row = document.createElement('tr');
+        let rankClass = rank === 2 ? "rank-2" : rank === 3 ? "rank-3" : "";
+        let scoreDisplay = data[category] || 0;
+        if (category === 'xp') scoreDisplay += " XP";
+        if (category === 'time') scoreDisplay += " Std.";
+
+        row.innerHTML = `
+          <td class="${rankClass}">#${rank}</td>
+          <td>${data.playerName || 'Anonym'}</td>
+          <td class="score-val">${scoreDisplay}</td>
+        `;
+        tbody.appendChild(row);
+        rank++;
+      }
     });
 
     if (snapshot.empty) {
@@ -149,7 +123,7 @@ function loadLeaderboardData(category) {
     }
   }, (error) => {
     console.error("Firebase Fehler:", error);
-    tbody.innerHTML = '<tr><td colspan="3" style="text-align:center;">Fehler beim Laden der Live-Daten.</td></tr>';
+    tbody.innerHTML = '<tr><td colspan="3" style="text-align:center; color:#ff6386;">Fehler beim Laden der Live-Daten.</td></tr>';
   });
 }
 
@@ -187,76 +161,10 @@ function renderMeta() {
   $('#coins').textContent = save.coins;
   $('#xp').textContent = save.xp;
   $('#level').textContent = 1 + Math.floor(save.xp / 1000);
-  document.body.className = (save.theme === 'neon' ? '' : 'theme-' + save.theme) + ' ' + (save.activeFont || 'font-default');
+  document.body.className = save.theme === 'neon' ? '' : 'theme-' + save.theme;
   $('#soundBtn').textContent = save.sound ? 'An' : 'Aus';
   $('#themeSelect').value = save.theme;
-  checkOwnerPanelVisibility();
 }
-
-function checkOwnerPanelVisibility() {
-  const ownerTab = $('#ownerTab');
-  const ownerView = $('#ownerView');
-  const ownerContainer = $('#ownerPanelContainer');
-  const isOwner = isOwnerName(save.playerName);
-  if (!ownerTab || !ownerView || !ownerContainer) return;
-
-  ownerTab.style.display = isOwner ? 'inline-flex' : 'none';
-  ownerView.style.display = isOwner ? '' : 'none';
-
-  if (!isOwner) {
-    ownerContainer.innerHTML = '';
-    return;
-  }
-
-  ownerContainer.innerHTML = `
-    <div class="panel owner-panel">
-      <div class="owner-panel-title">👑 Owner Admin Panel</div>
-      <p class="muted">Echte Firebase-Werte verwalten. Änderungen werden dauerhaft gespeichert.</p>
-      <div class="owner-grid">
-        <input type="text" id="opTargetName" placeholder="Exakter Spielername" autocomplete="off">
-        <select id="opStatType"><option value="coins">🪙 Münzen</option><option value="xp">⭐ XP</option><option value="time">⏱️ Spielstunden</option></select>
-        <input type="number" id="opAmount" min="1" step="1" value="100" placeholder="Anzahl">
-        <button class="buy owner-give" id="ownerGiveBtn" type="button">Wert vergeben</button>
-      </div>
-      <div class="owner-note">Owner: ${save.playerName} · Max-Startwerte: 999.999</div>
-    </div>`;
-
-  $('#ownerGiveBtn').onclick = executeOwnerAction;
-}
-
-async function executeOwnerAction() {
-  if (!isOwnerName(save.playerName)) {
-    return toast('Keine Berechtigung!');
-  }
-
-  const targetName = $('#opTargetName')?.value.trim();
-  const statType = $('#opStatType')?.value;
-  const amount = Math.floor(Number($('#opAmount')?.value));
-  if (!targetName) return toast('Bitte einen Spielernamen eingeben.');
-  if (!Number.isFinite(amount) || amount <= 0) return toast('Bitte eine positive Zahl eingeben.');
-
-  try {
-    const scoresRef = collection(db, "leaderboards");
-    const q = query(scoresRef, where("playerName", "==", targetName));
-    const querySnapshot = await getDocs(q);
-    if (querySnapshot.empty) return toast(`Spieler "${targetName}" nicht in Firebase gefunden.`);
-
-    const targetDoc = querySnapshot.docs[0];
-    const docRef = doc(db, "leaderboards", targetDoc.id);
-    const field = statType === 'coins' ? 'coins' : statType === 'xp' ? 'xp' : 'time';
-
-    await setDoc(docRef, { [field]: increment(amount) }, { merge: true });
-
-    const labels = { coins: 'Münzen', xp: 'XP', time: 'Spielstunden' };
-    toast(`+${amount} ${labels[statType]} an ${targetName} vergeben.`);
-    if ($('#opTargetName')) $('#opTargetName').value = '';
-    renderLeaderboard();
-  } catch (err) {
-    console.error("Owner Action Fehler:", err);
-    toast('Fehler beim Aktualisieren der Spielerdaten.');
-  }
-}
-window.executeOwnerAction = executeOwnerAction;
 
 function toast(t) {
   const e = $('#toast');
@@ -292,6 +200,7 @@ function burst(x = innerWidth / 2, y = innerHeight / 2) {
   }
 }
 
+// UNBEGRENZT MÜNZEN VERDIENEN
 function award(game, score, win = false) {
   if (roundEnded) return;
   roundEnded = true;
@@ -302,6 +211,7 @@ function award(game, score, win = false) {
     bonus = Math.min(8, 2 + Math.floor(Math.max(0, score) / 300));
   }
   if (win && !save.wins[game]) { save.wins[game] = true; if (!isNew) bonus += 2; }
+
   if (bonus) {
     save.coins += bonus;
     save.xp += bonus * 2;
@@ -334,23 +244,10 @@ const items = [
   ['skin-fruit', '🍇 Fruit Deluxe', 580, 'Episch', 'Leuchtender Spezial-Look für Fruit Merge.'],
   ['crosshair-cyber', '⌖ Cyber-Fadenkreuz', 300, 'Selten', 'Neon-Retikel beim Zielen im Star Defender.'],
   ['crosshair-rose', '✳ Rose-Fadenkreuz', 550, 'Episch', 'Rosafarbenes Präzisions-Retikel im Shooter.'],
-  ['crosshair-gold', '✧ Gold-Fadenkreuz', 1000, 'Legendär', 'Goldenes Zielkreuz mit Außenring im Shooter.'],
-  ['banner-cyber', '🟦 Cyber Banner', 450, 'Selten', 'Blauer Banner für deinen Ranglisten-Eintrag.'],
-  ['banner-gold', '🏆 Gold Banner', 900, 'Legendär', 'Goldener Banner für deinen Ranglisten-Eintrag.'],
-  ['banner-violet', '🟪 Violet Banner', 650, 'Episch', 'Violetter Banner mit Neon-Glow.'],
-  ['font-arcade', '🔤 Arcade Font', 500, 'Selten', 'Arcade-Schrift für dein Profil und deine Ranglisten-Daten.'],
-  ['font-mono', '⌨️ Mono Font', 350, 'Häufig', 'Technische Monospace-Schrift für dein Profil.']
+  ['crosshair-gold', '✧ Gold-Fadenkreuz', 1000, 'Legendär', 'Goldenes Zielkreuz mit Außenring im Shooter.']
 ];
 
-function equipped(id) { 
-  return id.startsWith('theme-') ? save.theme === id.slice(6) : 
-         id.startsWith('skin-') ? save.activeSkin === id : 
-         id.startsWith('crosshair-') ? save.activeCrosshair === id : 
-         id.startsWith('banner-') ? save.activeBanner === id : 
-         id.startsWith('font-') ? save.activeFont === id : 
-         id === 'trail-prism' ? save.activeTrail === id : 
-         id === 'sound-synth' ? save.soundStyle === id : false; 
-}
+function equipped(id) { return id.startsWith('theme-') ? save.theme === id.slice(6) : id.startsWith('skin-') ? save.activeSkin === id : id.startsWith('crosshair-') ? save.activeCrosshair === id : id === 'trail-prism' ? save.activeTrail === id : id === 'sound-synth' ? save.soundStyle === id : false; }
 
 function renderShop() {
   $('#shoplist').innerHTML = items.map(([id, n, c, rarity, d]) => {
@@ -370,12 +267,7 @@ window.buy = buy;
 
 function equip(id, newPurchase = false) {
   if (!save.unlocked.includes(id)) return;
-  let field = id.startsWith('theme-') ? 'theme' : 
-              id.startsWith('skin-') ? 'activeSkin' : 
-              id.startsWith('crosshair-') ? 'activeCrosshair' : 
-              id.startsWith('banner-') ? 'activeBanner' : 
-              id.startsWith('font-') ? 'activeFont' : 
-              id === 'trail-prism' ? 'activeTrail' : 'soundStyle';
+  let field = id.startsWith('theme-') ? 'theme' : id.startsWith('skin-') ? 'activeSkin' : id.startsWith('crosshair-') ? 'activeCrosshair' : id === 'trail-prism' ? 'activeTrail' : 'soundStyle';
   save[field] = id.startsWith('theme-') ? id.slice(6) : id;
   toast(newPurchase ? 'Gekauft und ausgerüstet!' : 'Item ausgerüstet.');
   persist();
@@ -384,23 +276,21 @@ function equip(id, newPurchase = false) {
 window.equip = equip;
 
 document.querySelectorAll('.tab').forEach(b => b.onclick = () => showView(b.dataset.view));
-checkOwnerPanelVisibility();
 
 function showView(v) {
-  if (v !== 'game') { stop(); active = ''; roundEnded = false; } else { stop(); }
+  if (v !== 'game' && active && $('#game').classList.contains('active')) quitGame(); else stop();
   $('.modal').classList.remove('show');
   document.querySelectorAll('.view').forEach(x => x.classList.toggle('active', x.id === v));
   document.querySelectorAll('.tab').forEach(x => x.classList.toggle('active', x.dataset.view === v));
   if (v === 'hub') renderGames();
   if (v === 'shop') renderShop();
   if (v === 'settings') renderMeta();
-  if (v === 'owner') { checkOwnerPanelVisibility(); }
   if (v === 'leaderboard') renderLeaderboard();
   window.scrollTo(0, 0);
 }
 window.showView = showView;
 
-function quitGame() { stop(); active = ''; roundEnded = false; $('#modal').classList.remove('show'); }
+function quitGame() { stop(); active = ''; $('#modal').classList.remove('show'); showView('hub'); }
 
 $('#soundBtn').onclick = () => { save.sound = !save.sound; persist(); };
 $('#themeSelect').onchange = e => {
@@ -422,7 +312,7 @@ $('#reset').onclick = () => {
   }
 };
 
-// 7-TAGE SPERRE, 50-MÜNZEN GEBÜHR & EINZIGARTIGKEIT FÜR DEN SPIELERNAME
+// 7-TAGE SPERRE FÜR DEN SPIELERNAME & SOFORTIGES SPEICHERN BEIM BEENDEN DER EINGABE / ENTER
 const pInput = $('#playerName');
 const SEVEN_DAYS = 7 * 24 * 60 * 60 * 1000;
 
@@ -432,74 +322,45 @@ function updateNameInputUI() {
   const now = Date.now();
   const timePassed = now - (save.lastNameChange || 0);
   const nameHint = $('#nameChangeHint');
+
   if (save.playerName && timePassed < SEVEN_DAYS) {
     const daysLeft = Math.ceil((SEVEN_DAYS - timePassed) / (1000 * 60 * 60 * 24));
-    if (nameHint) nameHint.textContent = `🔒 Namensänderung kostet 50 Coins (erste gratis, wieder frei in ${daysLeft} Tag(en))`;
+    pInput.disabled = true;
+    pInput.style.opacity = '0.5';
+    if (nameHint) nameHint.textContent = `🔒 Namensänderung gesperrt (wieder in ${daysLeft} Tag(en) möglich)`;
   } else {
-    if (nameHint) nameHint.textContent = '✏️ Namensänderung frei oder 50 Coins (Drücke Enter zum Speichern)';
+    pInput.disabled = false;
+    pInput.style.opacity = '1';
+    if (nameHint) nameHint.textContent = `✏️ Namensänderung frei (Drücke Enter zum Speichern)`;
   }
 }
 
 if (pInput) {
   updateNameInputUI();
-  const handleNameSave = async () => {
-    let newName = pInput.value.trim().slice(0, 18);
-    if (!newName || newName === save.playerName) {
+
+  const handleNameSave = () => {
+    const newName = pInput.value.trim().slice(0, 18);
+    if (!newName) {
       pInput.value = save.playerName || '';
       return;
     }
+    const now = Date.now();
+    const timePassed = now - (save.lastNameChange || 0);
 
-    if (isOwnerName(newName)) {
-      save.playerId = ownerIdFor(newName);
-      save.coins = OWNER_MAX;
-      save.xp = OWNER_MAX;
-      save.time = OWNER_MAX;
+    if (save.playerName && save.playerName !== newName && timePassed < SEVEN_DAYS) {
+      const daysLeft = Math.ceil((SEVEN_DAYS - timePassed) / (1000 * 60 * 60 * 24));
+      toast(`Namensänderung erst in ${daysLeft} Tag(en) wieder möglich!`);
+      pInput.value = save.playerName;
+      return;
     }
 
-    try {
-      const scoresRef = collection(db, "leaderboards");
-      const q = query(scoresRef, where("playerName", "==", newName));
-      const querySnapshot = await getDocs(q);
-
-      let nameTaken = false;
-      querySnapshot.forEach((docSnap) => {
-        if (docSnap.id !== save.playerId) {
-          nameTaken = true;
-        }
-      });
-
-      if (nameTaken && !isOwnerName(newName)) {
-        toast('Name ist bereits vergeben!');
-        pInput.value = save.playerName || '';
-        return;
-      }
-
-      const now = Date.now();
-      const timePassed = now - (save.lastNameChange || 0);
-
-      if (save.playerName && timePassed < SEVEN_DAYS) {
-        if (save.coins < 50) {
-          toast('Zu wenig Coins! Namenswechsel kostet 50 Coins.');
-          pInput.value = save.playerName;
-          return;
-        }
-        save.coins -= 50;
-        toast('50 Coins für Namensänderung bezahlt!');
-      }
-
+    if (save.playerName !== newName) {
       save.playerName = newName;
       save.lastNameChange = now;
-      toast('Name erfolgreich gespeichert!');
+      toast('Name aktualisiert!');
       persist();
       updateNameInputUI();
       renderLeaderboard();
-      checkOwnerPanelVisibility();
-      startPlayerRealtimeSync();
-
-    } catch (err) {
-      console.error("Fehler bei Namensprüfung:", err);
-      toast('Fehler beim Prüfen des Namens.');
-      pInput.value = save.playerName || '';
     }
   };
 
@@ -511,67 +372,21 @@ if (pInput) {
   };
 }
 
-if (save.playerName) startPlayerRealtimeSync();
-
-// SPIEL ENGINES & LOOPS
+// GAME ENGINES & LOOPS
 let active = '', raf = 0, last = 0, roundEnded = false, cleanup = () => { };
 function stop() { cancelAnimationFrame(raf); cleanup(); cleanup = () => { }; last = 0; }
-function loop(update, draw) { 
-  function f(t) { 
-    let dt = Math.min(.05, (t - last || t) / 1000); 
-    last = t; 
-    update(dt); 
-    draw(); 
-    if (!roundEnded) raf = requestAnimationFrame(f); 
-  } 
-  raf = requestAnimationFrame(f); 
-}
-
-function canvas(w = 400, h = 520) { 
-  $('#gameUI').innerHTML = `<div class="hud" id="hud"></div><canvas width="${w}" height="${h}"></canvas><div class="controls" id="controls"><i class="empty"></i><button data-k="ArrowUp">▲</button><i class="empty"></i><button data-k="ArrowLeft">◀</button><button data-k=" ">●</button><button data-k="ArrowRight">▶</button><i class="empty"></i><button data-k="ArrowDown">▼</button><i class="empty"></i></div>`; 
-  let c = $('canvas'), x = c.getContext('2d');$('#controls').onclick = e => { let k = e.target.dataset.k; if (k) key(k); }; 
-  return [c, x]; 
-}
-
-function hud(s) { $('#hud').innerHTML = s; } 
-function key(k) { window.dispatchEvent(new KeyboardEvent('keydown', { key: k })); }
+function loop(update, draw) { function f(t) { let dt = Math.min(.05, (t - last || t) / 1000); last = t; update(dt); draw(); if (!roundEnded) raf = requestAnimationFrame(f); } raf = requestAnimationFrame(f); }
+function canvas(w = 400, h = 520) { $('#gameUI').innerHTML = `<div class="hud" id="hud"></div><canvas width="${w}" height="${h}"></canvas><div class="controls" id="controls"><i class="empty"></i><button data-k="ArrowUp">▲</button><i class="empty"></i><button data-k="ArrowLeft">◀</button><button data-k=" ">●</button><button data-k="ArrowRight">▶</button><i class="empty"></i><button data-k="ArrowDown">▼</button><i class="empty"></i></div>`; let c = $('canvas'), x = c.getContext('2d'); $('#controls').onclick = e => { let k = e.target.dataset.k; if (k) key(k); }; return [c, x]; }
+function hud(s) { $('#hud').innerHTML = s; } function key(k) { window.dispatchEvent(new KeyboardEvent('keydown', { key: k })); }
 function end(title, text, score, win = false) { if (roundEnded) return; stop(); award(active, score, win); $('#modalTitle').textContent = title; $('#modalText').textContent = text; $('#modal').classList.add('show'); $('#modalRestart').onclick = () => launch(active); }
 
-function launch(id) { 
-  stop(); 
-  sessionId++; 
-  active = id; 
-  roundEnded = false; 
-  showView('game'); 
-  let g = games.find(x => x[0] === id); 
-  $('#gameTitle').textContent = g[2]; 
-  if (id === 'snake') snake(); 
-  else if (id === 'tetris') tetris(); 
-  else if (id === 'flappy') flappy(); 
-  else if (id === 'space') space(); 
-  else if (id === 'pong') pong(); 
-  else if (id === '2048') game2048(); 
-  else if (id === 'ttt') ttt(); 
-  else if (id === 'memory') memory(); 
-  else if (id === 'fruit') fruit(); 
-  else rhythm(); 
-}
+function launch(id) { stop(); sessionId++; active = id; roundEnded = false; showView('game'); let g = games.find(x => x[0] === id); $('#gameTitle').textContent = g[2]; if (id === 'snake') snake(); else if (id === 'tetris') tetris(); else if (id === 'flappy') flappy(); else if (id === 'space') space(); else if (id === 'pong') pong(); else if (id === '2048') game2048(); else if (id === 'ttt') ttt(); else if (id === 'memory') memory(); else if (id === 'fruit') fruit(); else rhythm(); }
 window.launch = launch;
 
 let sessionId = 0, keyHandler = null;
-function bind(fn) { 
-  if (keyHandler) window.removeEventListener('keydown', keyHandler); 
-  const owner = sessionId, ownerGame = active; 
-  keyHandler = e => { 
-    if (active === ownerGame && sessionId === owner && !roundEnded && ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) { 
-      e.preventDefault(); 
-      fn(e.key); 
-    } 
-  }; 
-  window.addEventListener('keydown', keyHandler, { passive: false }); 
-}
+function bind(fn) { if (keyHandler) window.removeEventListener('keydown', keyHandler); const owner = sessionId, ownerGame = active; keyHandler = e => { if (active === ownerGame && sessionId === owner && !roundEnded && ['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', ' '].includes(e.key)) { e.preventDefault(); fn(e.key); } }; window.addEventListener('keydown', keyHandler, { passive: false }); }
 
-// 1. SNAKE
+// 1. SNAKE (Leicht verlangsamt)
 function snake() {
   let [c, x] = canvas(400, 400), n = 20, s = [{ x: 10, y: 10 }], food = { x: 15, y: 15 }, dir = { x: 1, y: 0 }, next = dir, acc = 0, score = 0;
   function spawn() { do { food = { x: Math.floor(Math.random() * n), y: Math.floor(Math.random() * n) }; } while (s.some(q => q.x === food.x && q.y === food.y)); }
@@ -582,6 +397,7 @@ function snake() {
     s.unshift(h);
     if (h.x === food.x && h.y === food.y) { score += 10; spawn(); sound('win'); } else s.pop();
   }
+  // Intervall von 0.115s auf 0.145s erhöht für etwas langsamere Geschwindigkeit
   loop(dt => { acc += dt; while (acc > .145) { acc -= .145; step(); } }, () => {
     x.fillStyle = '#050713'; x.fillRect(0, 0, 400, 400);
     x.fillStyle = '#ff6386'; x.fillRect(food.x * 20 + 3, food.y * 20 + 3, 14, 14);
@@ -590,12 +406,12 @@ function snake() {
   });
 }
 
-// 2. TETRIS
+// 2. TETRIS (Dezenter Arcade-Grid-Hintergrund & Glow-Effekte)
 function tetris() {
   let [c, x] = canvas(300, 600), W = 10, H = 20, B = Array.from({ length: H }, () => Array(W).fill(0)),
-  sh = [[[1, 1, 1, 1]], [[1, 1], [1, 1]], [[0, 1, 0], [1, 1, 1]], [[1, 0, 0], [1, 1, 1]], [[0, 0, 1], [1, 1, 1]], [[1, 1, 0], [0, 1, 1]], [[0, 1, 1], [1, 1, 0]]],
-  colors = ['#55e6ff', '#ffe063', '#cb5cff', '#ff8e58', '#5385ff', '#72ffae', '#ff6386'],
-  p, newp = () => p = { m: sh[Math.random() * sh.length | 0], x: 3, y: 0, col: colors[Math.random() * colors.length | 0] }, score = 0, acc = 0;
+    sh = [[[1, 1, 1, 1]], [[1, 1], [1, 1]], [[0, 1, 0], [1, 1, 1]], [[1, 0, 0], [1, 1, 1]], [[0, 0, 1], [1, 1, 1]], [[1, 1, 0], [0, 1, 1]], [[0, 1, 1], [1, 1, 0]]],
+    colors = ['#55e6ff', '#ffe063', '#cb5cff', '#ff8e58', '#5385ff', '#72ffae', '#ff6386'],
+    p, newp = () => p = { m: sh[Math.random() * sh.length | 0], x: 3, y: 0, col: colors[Math.random() * colors.length | 0] }, score = 0, acc = 0;
   newp();
   function hit(m = p.m, ox = p.x, oy = p.y) { return m.some((r, y) => r.some((v, z) => v && (ox + z < 0 || ox + z >= W || oy + y >= H || (oy + y >= 0 && B[oy + y][ox + z])))); }
   function drop() {
@@ -615,13 +431,18 @@ function tetris() {
   });
   loop(dt => { acc += dt; let speed = Math.max(.13, .72 - score / 3500); while (acc > speed) { acc -= speed; drop(); } }, () => {
     x.fillStyle = '#060917'; x.fillRect(0, 0, 300, 600);
+    // Dezenter Arcade-Rasterhintergrund
     x.strokeStyle = 'rgba(85, 230, 255, 0.05)'; x.lineWidth = 1;
     for (let gx = 0; gx <= 300; gx += 30) { x.beginPath(); x.moveTo(gx, 0); x.lineTo(gx, 600); x.stroke(); }
     for (let gy = 0; gy <= 600; gy += 30) { x.beginPath(); x.moveTo(0, gy); x.lineTo(300, gy); x.stroke(); }
+    
+    // Platziertes Spielfeld mit leichtem Glow
     x.shadowBlur = 8;
     B.forEach((r, y) => r.forEach((v, z) => {
       if (v) { x.fillStyle = v; x.shadowColor = v; x.fillRect(z * 30 + 1, y * 30 + 1, 28, 28); }
     }));
+    
+    // Aktive Tetris-Kachel mit intensivem Glow
     x.fillStyle = p.col; x.shadowColor = p.col; x.shadowBlur = 12;
     p.m.forEach((r, y) => r.forEach((v, z) => v && x.fillRect((p.x + z) * 30 + 1, (p.y + y) * 30 + 1, 28, 28)));
     x.shadowBlur = 0;
@@ -629,166 +450,41 @@ function tetris() {
   });
 }
 
-// 3. FLAPPY
-function flappy() { 
-  let [c, x] = canvas(), y = 250, v = 0, p = [], score = 0, acc = 0, started = false, time = 0; 
-  function flap() { if (roundEnded) return; started = true; v = -320; sound(); } 
-  bind(k => { if (k === ' ' || k === 'ArrowUp') flap(); }); 
-  c.addEventListener('pointerdown', flap); 
-  cleanup = () => { c.removeEventListener('pointerdown', flap); }; 
-  loop(dt => { 
-    if (!started) return; 
-    time += dt; 
-    v += 900 * dt; 
-    y += v * dt; 
-    acc += dt; 
-    if (acc > .14) { 
-      acc = 0; 
-      if (!p.length || p.at(-1).x < 225) p.push({ x: 420, gap: 115 + Math.random() * 210, ok: false }); 
-    } 
-    for (const o of p) { 
-      o.x -= 165 * dt; 
-      if (o.x < 95 && o.x + 62 > 66 && (y - 14 < o.gap - 78 || y + 14 > o.gap + 78)) return end('Vogel abgestürzt', `Score: ${score}`, score); 
-      if (!o.ok && o.x < 66) { o.ok = true; score++; sound('win'); } 
-    } 
-    p = p.filter(o => o.x > -70); 
-    if (y < 0 || y > 520) end('Vogel abgestürzt', `Score: ${score}`, score); 
-  }, () => { 
-    let sky = x.createLinearGradient(0, 0, 0, 520); 
-    sky.addColorStop(0, '#07152f'); 
-    sky.addColorStop(.58, '#244e79'); 
-    sky.addColorStop(1, '#ff9d70'); 
-    x.fillStyle = sky; 
-    x.fillRect(0, 0, 400, 520); 
-    x.fillStyle = '#ffffff20'; 
-    for (let i = 0; i < 5; i++) { 
-      let cx = (i * 117 - (time * 18) % 520 + 520) % 520; 
-      x.beginPath(); 
-      x.ellipse(cx, 70 + i % 3 * 45, 38, 12, 0, 0, Math.PI * 2); 
-      x.ellipse(cx + 28, 68 + i % 3 * 45, 25, 10, 0, 0, Math.PI * 2); 
-      x.fill(); 
-    } 
-    x.fillStyle = '#12334a'; 
-    for (let i = 0; i < 10; i++) { 
-      let bx = i * 48; 
-      x.fillRect(bx, 420 - (i % 3) * 14, 30, 100); 
-      x.fillStyle = '#ffe06355'; 
-      x.fillRect(bx + 5, 432 - (i % 3) * 14, 3, 24); 
-      x.fillStyle = '#12334a'; 
-    } 
-    for (const o of p) { 
-      let g = x.createLinearGradient(o.x, 0, o.x + 62, 0); 
-      g.addColorStop(0, '#168667'); 
-      g.addColorStop(.48, '#60ffc0'); 
-      g.addColorStop(1, '#147556'); 
-      x.fillStyle = g; 
-      x.strokeStyle = '#a7ffdc'; 
-      x.lineWidth = 2; 
-      x.fillRect(o.x, 0, 62, o.gap - 78); 
-      x.strokeRect(o.x + 1, 0, 60, o.gap - 78); 
-      x.fillRect(o.x, o.gap + 78, 62, 520); 
-      x.strokeRect(o.x + 1, o.gap + 79, 60, 440 - o.gap); 
-      x.fillStyle = '#7cffc2'; 
-      x.fillRect(o.x - 7, o.gap - 91, 76, 15); 
-      x.strokeStyle = '#b5ffe0'; 
-      x.strokeRect(o.x - 7, o.gap - 91, 76, 15); 
-      x.fillRect(o.x - 7, o.gap + 76, 76, 15); 
-      x.strokeRect(o.x - 7, o.gap + 76, 76, 15); 
-      x.fillStyle = '#0a674e'; 
-      for (let by = 28; by < o.gap - 95; by += 34) x.fillRect(o.x + 8, by, 4, 12); 
-      for (let by = o.gap + 100; by < 510; by += 34) x.fillRect(o.x + 8, by, 4, 12); 
-    } 
-    x.fillStyle = '#553b2b'; 
-    x.fillRect(0, 495, 400, 25); 
-    x.fillStyle = '#b48250'; 
-    for (let i = 0; i < 400; i += 24) x.fillRect(i, 495, 12, 3); 
-    x.save(); 
-    x.translate(80, y); 
-    x.rotate(clamp(v / 650, -.45, .55)); 
-    x.shadowColor = '#ffcf5a'; 
-    x.shadowBlur = 16; 
-    x.fillStyle = '#f8bd42'; 
-    x.beginPath(); 
-    x.ellipse(0, 0, 19, 14, 0, 0, Math.PI * 2); 
-    x.fill(); 
-    x.shadowBlur = 0; 
-    x.fillStyle = '#e99425'; 
-    x.beginPath(); 
-    x.ellipse(-4, 7, 10, 5, -.3 + Math.sin(time * 16) * .14, 0, Math.PI * 2); 
-    x.fill(); 
-    x.fillStyle = '#fff1ba'; 
-    x.beginPath(); 
-    x.ellipse(7, -4, 6, 7, 0, 0, Math.PI * 2); 
-    x.fill(); 
-    x.fillStyle = '#162035'; 
-    x.beginPath(); 
-    x.arc(9, -4, 2.2, 0, Math.PI * 2); 
-    x.fill(); 
-    x.fillStyle = '#ff704f'; 
-    x.beginPath(); 
-    x.moveTo(15, 1); 
-    x.lineTo(28, 5); 
-    x.lineTo(15, 9); 
-    x.closePath(); 
-    x.fill(); 
-    x.fillStyle = '#e98b29'; 
-    x.beginPath(); 
-    x.moveTo(-15, 0); 
-    x.lineTo(-25, -7); 
-    x.lineTo(-22, 4); 
-    x.closePath(); 
-    x.fill(); 
-    x.restore(); 
-    x.fillStyle = '#fff'; 
-    x.font = 'bold 25px system-ui'; 
-    x.textAlign = 'center'; 
-    x.fillText(String(score), 200, 48); 
-    if (!started) { 
-      x.fillStyle = '#041020b8'; 
-      x.fillRect(35, 210, 330, 86); 
-      x.fillStyle = '#fff'; 
-      x.font = 'bold 18px system-ui'; 
-      x.fillText('TIPPE, DAMIT DER VOGEL FLIEGT', 200, 246); 
-      x.font = '14px system-ui'; 
-      x.fillText('Tippen oder Leertaste', 200, 273); 
-    } 
-    hud(`SCORE <b>${score}</b> · BEST <b>${scoreText('flappy')}</b>`); 
-  }); 
-}
+function flappy() { let [c, x] = canvas(), y = 250, v = 0, p = [], score = 0, acc = 0, started = false, time = 0; function flap() { if (roundEnded) return; started = true; v = -320; sound(); } bind(k => { if (k === ' ' || k === 'ArrowUp') flap(); }); c.addEventListener('pointerdown', flap); cleanup = () => { c.removeEventListener('pointerdown', flap); }; loop(dt => { if (!started) return; time += dt; v += 900 * dt; y += v * dt; acc += dt; if (acc > .14) { acc = 0; if (!p.length || p.at(-1).x < 225) p.push({ x: 420, gap: 115 + Math.random() * 210, ok: false }); } for (const o of p) { o.x -= 165 * dt; if (o.x < 95 && o.x + 62 > 66 && (y - 14 < o.gap - 78 || y + 14 > o.gap + 78)) return end('Vogel abgestürzt', `Score: ${score}`, score); if (!o.ok && o.x < 66) { o.ok = true; score++; sound('win'); } } p = p.filter(o => o.x > -70); if (y < 0 || y > 520) end('Vogel abgestürzt', `Score: ${score}`, score); }, () => { let sky = x.createLinearGradient(0, 0, 0, 520); sky.addColorStop(0, '#07152f'); sky.addColorStop(.58, '#244e79'); sky.addColorStop(1, '#ff9d70'); x.fillStyle = sky; x.fillRect(0, 0, 400, 520); x.fillStyle = '#ffffff20'; for (let i = 0; i < 5; i++) { let cx = (i * 117 - (time * 18) % 520 + 520) % 520; x.beginPath(); x.ellipse(cx, 70 + i % 3 * 45, 38, 12, 0, 0, Math.PI * 2); x.ellipse(cx + 28, 68 + i % 3 * 45, 25, 10, 0, 0, Math.PI * 2); x.fill(); } x.fillStyle = '#12334a'; for (let i = 0; i < 10; i++) { let bx = i * 48; x.fillRect(bx, 420 - (i % 3) * 14, 30, 100); x.fillStyle = '#ffe06355'; x.fillRect(bx + 5, 432 - (i % 3) * 14, 3, 24); x.fillStyle = '#12334a'; } for (const o of p) { let g = x.createLinearGradient(o.x, 0, o.x + 62, 0); g.addColorStop(0, '#168667'); g.addColorStop(.48, '#60ffc0'); g.addColorStop(1, '#147556'); x.fillStyle = g; x.strokeStyle = '#a7ffdc'; x.lineWidth = 2; x.fillRect(o.x, 0, 62, o.gap - 78); x.strokeRect(o.x + 1, 0, 60, o.gap - 78); x.fillRect(o.x, o.gap + 78, 62, 520); x.strokeRect(o.x + 1, o.gap + 79, 60, 440 - o.gap); x.fillStyle = '#7cffc2'; x.fillRect(o.x - 7, o.gap - 91, 76, 15); x.strokeStyle = '#b5ffe0'; x.strokeRect(o.x - 7, o.gap - 91, 76, 15); x.fillRect(o.x - 7, o.gap + 76, 76, 15); x.strokeRect(o.x - 7, o.gap + 76, 76, 15); x.fillStyle = '#0a674e'; for (let by = 28; by < o.gap - 95; by += 34) x.fillRect(o.x + 8, by, 4, 12); for (let by = o.gap + 100; by < 510; by += 34) x.fillRect(o.x + 8, by, 4, 12); } x.fillStyle = '#553b2b'; x.fillRect(0, 495, 400, 25); x.fillStyle = '#b48250'; for (let i = 0; i < 400; i += 24) x.fillRect(i, 495, 12, 3); x.save(); x.translate(80, y); x.rotate(clamp(v / 650, -.45, .55)); x.shadowColor = '#ffcf5a'; x.shadowBlur = 16; x.fillStyle = '#f8bd42'; x.beginPath(); x.ellipse(0, 0, 19, 14, 0, 0, Math.PI * 2); x.fill(); x.shadowBlur = 0; x.fillStyle = '#e99425'; x.beginPath(); x.ellipse(-4, 7, 10, 5, -.3 + Math.sin(time * 16) * .14, 0, Math.PI * 2); x.fill(); x.fillStyle = '#fff1ba'; x.beginPath(); x.ellipse(7, -4, 6, 7, 0, 0, Math.PI * 2); x.fill(); x.fillStyle = '#162035'; x.beginPath(); x.arc(9, -4, 2.2, 0, Math.PI * 2); x.fill(); x.fillStyle = '#ff704f'; x.beginPath(); x.moveTo(15, 1); x.lineTo(28, 5); x.lineTo(15, 9); x.closePath(); x.fill(); x.fillStyle = '#e98b29'; x.beginPath(); x.moveTo(-15, 0); x.lineTo(-25, -7); x.lineTo(-22, 4); x.closePath(); x.fill(); x.restore(); x.fillStyle = '#fff'; x.font = 'bold 25px system-ui'; x.textAlign = 'center'; x.fillText(String(score), 200, 48); if (!started) { x.fillStyle = '#041020b8'; x.fillRect(35, 210, 330, 86); x.fillStyle = '#fff'; x.font = 'bold 18px system-ui'; x.fillText('TIPPE, DAMIT DER VOGEL FLIEGT', 200, 246); x.font = '14px system-ui'; x.fillText('Tippen oder Leertaste', 200, 273); } hud(`SCORE <b>${score}</b> · BEST <b>${scoreText('flappy')}</b>`); }); }
 
-// 4. STAR DEFENDER
+// 3. STAR DEFENDER (10 Base-Leben, Orbs, Ausgewogene Spawns, Treffer-Animationen)
 function space() {
   let [c, x] = canvas(), px = 200, shots = [], enemies = [], powerups = [], explosions = [],
-  acc = 0, shootCooldown = 0, boostTimer = 0, baseLives = 10, baseHitFlash = 0, score = 0;
-  
+    acc = 0, shootCooldown = 0, boostTimer = 0, baseLives = 10, baseHitFlash = 0, score = 0;
+
   function shoot() {
     if (shootCooldown > 0) return;
     shots.push({ x: px, y: 455 });
     sound();
-    shootCooldown = boostTimer > 0 ? 0.12 : 0.25;
+    shootCooldown = boostTimer > 0 ? 0.12 : 0.25; // 2x Schussgeschwindigkeit bei Powerup
   }
-  
+
   bind(k => {
     if (k === 'ArrowLeft') px -= 28;
     if (k === 'ArrowRight') px += 28;
     if (k === ' ' || k === 'ArrowUp') shoot();
   });
-  
   c.onpointermove = e => { let r = c.getBoundingClientRect(); px = clamp((e.clientX - r.left) * 400 / r.width, 15, 385); };
   c.onpointerdown = shoot;
   cleanup = () => { c.onpointermove = null; c.onpointerdown = null; };
-  
+
   loop(dt => {
     px = clamp(px, 15, 385);
     if (shootCooldown > 0) shootCooldown -= dt;
     if (boostTimer > 0) boostTimer -= dt;
     if (baseHitFlash > 0) baseHitFlash -= dt;
-    
+
+    // Kontrolliertes Gegner-Spawnsystem
     acc += dt;
     let spawnRate = Math.max(0.75, 1.6 - Math.floor(score / 100) * 0.1);
     if (acc > spawnRate) {
       acc = 0;
-      if (enemies.length < 6) {
+      if (enemies.length < 6) { // Max 6 Gegner gleichzeitig für faire Balance
         enemies.push({ x: 20 + Math.random() * 350, y: -25, v: 50 + score * 0.3 });
       }
     }
@@ -797,11 +493,13 @@ function space() {
     enemies.forEach(q => q.y += q.v * dt);
     powerups.forEach(p => p.y += 80 * dt);
 
+    // Explosionspartikel aktualisieren
     for (let i = explosions.length - 1; i >= 0; i--) {
       let ex = explosions[i]; ex.y += ex.vy * dt; ex.x += ex.vx * dt; ex.life -= dt * 2.5;
       if (ex.life <= 0) explosions.splice(i, 1);
     }
 
+    // Powerup Aufsammeln
     for (let i = powerups.length - 1; i >= 0; i--) {
       let p = powerups[i];
       if (Math.hypot(p.x - px, p.y - 480) < 25) {
@@ -812,8 +510,10 @@ function space() {
       } else if (p.y > 520) powerups.splice(i, 1);
     }
 
+    // Kollisionen & Treffer
     for (let i = enemies.length - 1; i >= 0; i--) {
       let e = enemies[i];
+      // Gegner trifft Base am unteren Rand
       if (e.y > 470) {
         baseLives--;
         baseHitFlash = 0.35;
@@ -823,11 +523,15 @@ function space() {
         continue;
       }
 
+      // Treffer durch Spielerschuss
       for (let j = shots.length - 1; j >= 0; j--) {
         if (Math.abs(shots[j].x - e.x) < 20 && Math.abs(shots[j].y - e.y) < 24) {
+          // Partikel-Explosion erzeugen
           for (let k = 0; k < 6; k++) {
             explosions.push({ x: e.x, y: e.y, vx: (Math.random() - 0.5) * 120, vy: (Math.random() - 0.5) * 120, life: 1, c: k % 2 ? '#ff6386' : '#ffe063' });
           }
+          
+          // Kontrollierte Power-Up Spawns (Speed: ~15%, Extra-Leben: sehr selten ~3%)
           let r = Math.random();
           if (r < 0.03) powerups.push({ x: e.x, y: e.y, type: 'life' });
           else if (r < 0.18) powerups.push({ x: e.x, y: e.y, type: 'speed' });
@@ -844,296 +548,356 @@ function space() {
     shots = shots.filter(q => q.y > -10);
     enemies = enemies.filter(q => q.y < 540);
   }, () => {
-    x.fillStyle = '#050713';
-    x.fillRect(0, 0, 400, 520);
+    x.fillStyle = '#030511'; x.fillRect(0, 0, 400, 520);
+    x.fillStyle = '#fff'; for (let i = 0; i < 38; i++) x.fillRect((i * 71) % 400, (i * 113) % 520, 1, 1);
 
-    x.fillStyle = baseHitFlash > 0 ? '#ff6386' : '#1e2d5a';
-    x.fillRect(0, 480, 400, 40);
+    // Rote Base-Treffer Warnanzeige
+    if (baseLives <= 3) {
+      x.fillStyle = 'rgba(255, 99, 134, ' + (0.15 + Math.sin(Date.now() / 200) * 0.1) + ')';
+      x.fillRect(0, 460, 400, 60);
+    }
+    if (baseHitFlash > 0) {
+      x.fillStyle = 'rgba(255, 99, 134, ' + (baseHitFlash * 2) + ')';
+      x.fillRect(0, 0, 400, 520);
+    }
 
-    x.fillStyle = '#ffe063';
-    x.font = '12px system-ui';
-    x.fillText(`Basis-HP: ${baseLives} / 10`, 15, 505);
+    // Raumschiff des Spielers
+    x.fillStyle = boostTimer > 0 ? '#55e6ff' : '#162c59';
+    x.beginPath(); x.moveTo(px, 458); x.lineTo(px - 24, 496); x.lineTo(px - 10, 488); x.lineTo(px, 500); x.lineTo(px + 10, 488); x.lineTo(px + 24, 496); x.closePath(); x.fill();
+    x.strokeStyle = '#55e6ff'; x.lineWidth = 2; x.shadowColor = '#55e6ff'; x.shadowBlur = boostTimer > 0 ? 18 : 8; x.stroke(); x.shadowBlur = 0;
 
-    x.fillStyle = '#55e6ff';
-    shots.forEach(s => x.fillRect(s.x - 2, s.y, 4, 12));
+    // Schüsse
+    x.fillStyle = boostTimer > 0 ? '#72ffae' : '#ffe063';
+    shots.forEach(q => x.fillRect(q.x - 2, q.y, 4, 12));
 
-    enemies.forEach(e => {
-      x.fillStyle = '#ff6386';
-      x.fillRect(e.x - 12, e.y - 12, 24, 24);
-    });
-
+    // Power-Up Orbs zeichnen
     powerups.forEach(p => {
-      x.fillStyle = p.type === 'life' ? '#72ffae' : '#ffe063';
-      x.fillRect(p.x - 8, p.y - 8, 16, 16);
+      x.beginPath(); x.arc(p.x, p.y, 9, 0, Math.PI * 2);
+      x.fillStyle = p.type === 'life' ? '#72ffae' : '#55e6ff';
+      x.shadowColor = x.fillStyle; x.shadowBlur = 10; x.fill(); x.shadowBlur = 0;
+      x.fillStyle = '#000'; x.font = 'bold 10px system-ui'; x.textAlign = 'center';
+      x.fillText(p.type === 'life' ? '❤️' : '⚡', p.x, p.y + 3);
     });
 
-    x.fillStyle = '#55e6ff';
-    x.beginPath();
-    x.moveTo(px, 460);
-    x.lineTo(px - 14, 480);
-    x.lineTo(px + 14, 480);
-    x.closePath();
-    x.fill();
-
+    // Explosionspartikel zeichnen
     explosions.forEach(ex => {
-      x.fillStyle = ex.c;
-      x.globalAlpha = Math.max(0, ex.life);
-      x.fillRect(ex.x, ex.y, 5, 5);
-      x.globalAlpha = 1.0;
+      x.fillStyle = ex.c; x.globalAlpha = ex.life;
+      x.fillRect(ex.x, ex.y, 3, 3);
+      x.globalAlpha = 1;
     });
 
-    hud(`SCORE <b>${score}</b> · BEST <b>${scoreText('space')}</b>`);
+    // Gegner
+    x.fillStyle = '#ff6386';
+    enemies.forEach(q => {
+      x.beginPath(); x.moveTo(q.x, q.y - 12); x.lineTo(q.x + 16, q.y); x.lineTo(q.x + 11, q.y + 12); x.lineTo(q.x - 11, q.y + 12); x.lineTo(q.x - 16, q.y); x.closePath(); x.fill();
+    });
+
+    let boostText = boostTimer > 0 ? ` · ⚡ <b>${Math.ceil(boostTimer)}s</b>` : '';
+    hud(`BASE: <b>${'❤️'.repeat(baseLives)}</b> (${baseLives}/10) · SCORE <b>${score}</b>${boostText}`);
   });
 }
 
-// 5. PONG
+// 4. PONG (Modusauswahl: 1v1 vs. Verbesserte KI)
 function pong() {
-  let [c, x] = canvas(400, 400), bx = 200, by = 200, bvx = 150, bvy = 150, py = 160, ai = 160, score = 0;
-  bind(k => { if (k === 'ArrowUp') py = Math.max(0, py - 30); if (k === 'ArrowDown') py = Math.min(320, py + 30); });
-  c.onpointermove = e => { let r = c.getBoundingClientRect(); py = clamp((e.clientY - r.top) * 400 / r.height - 40, 0, 320); };
-  cleanup = () => { c.onpointermove = null; };
-  loop(dt => {
-    bx += bvx * dt; by += bvy * dt;
-    ai += (by - (ai + 40)) * 3.5 * dt;
-    ai = clamp(ai, 0, 320);
-    if (by < 10 || by > 390) { bvy *= -1; sound(); }
-    if (bx < 25 && by >= py && by <= py + 80) { bvx *= -1; bvx *= 1.05; score += 1; sound('win'); }
-    if (bx > 375 && by >= ai && by <= ai + 80) { bvx *= -1; sound(); }
-    if (bx < 0 || bx > 400) return end('Pong verloren', `Score: ${score}`, score);
-  }, () => {
-    x.fillStyle = '#050713'; x.fillRect(0, 0, 400, 400);
-    x.fillStyle = '#55e6ff'; x.fillRect(10, py, 10, 80);
-    x.fillStyle = '#ff6386'; x.fillRect(380, ai, 10, 80);
-    x.fillStyle = '#ffe063'; x.fillRect(bx - 6, by - 6, 12, 12);
-    hud(`SCORE <b>${score}</b> · BEST <b>${scoreText('pong')}</b>`);
-  });
-}
+  $('#gameUI').innerHTML = `
+    <div class="mode-select-box" id="pongModeSelect">
+      <h3 style="color:var(--a); margin-bottom:10px;">Spielmodus wählen</h3>
+      <button class="mode-btn" id="btnVsAI">🤖 Gegen KI</button>
+      <button class="mode-btn" id="btnVs1v1">🎮 1 gegen 1 (Lokal)</button>
+    </div>
+  `;
 
-// 6. 2048 NOVA
-function game2048() {
-  let [c, x] = canvas(400, 400), grid = Array(16).fill(0), score = 0;
-  function addTile() {
-    let empty = grid.map((v, i) => v === 0 ? i : null).filter(v => v !== null);
-    if (empty.length) grid[empty[Math.floor(Math.random() * empty.length)]] = Math.random() < 0.9 ? 2 : 4;
-  }
-  addTile(); addTile();
-  function slide(row) {
-    let arr = row.filter(v => v);
-    for (let i = 0; i < arr.length - 1; i++) {
-      if (arr[i] === arr[i+1]) { arr[i] *= 2; score += arr[i]; arr[i+1] = 0; }
-    }
-    arr = arr.filter(v => v);
-    while (arr.length < 4) arr.push(0);
-    return arr;
-  }
-  bind(k => {
-    let changed = false;
-    if (k === 'ArrowLeft' || k === 'ArrowRight') {
-      for (let r = 0; r < 4; r++) {
-        let row = [grid[r*4], grid[r*4+1], grid[r*4+2], grid[r*4+3]];
-        if (k === 'ArrowRight') row.reverse();
-        let newRow = slide(row);
-        if (k === 'ArrowRight') newRow.reverse();
-        for (let i = 0; i < 4; i++) {
-          if (grid[r*4+i] !== newRow[i]) changed = true;
-          grid[r*4+i] = newRow[i];
-        }
+  $('#btnVsAI').onclick = () => startPongGame(false);
+  $('#btnVs1v1').onclick = () => startPongGame(true);
+
+  function startPongGame(isMultiplayer) {
+    let [c, x] = canvas(), py = 220, ai = 220, b = { x: 200, y: 260, vx: -230, vy: 145 }, player = 0, opponent = 0;
+
+    function serve(toPlayer) { b = { x: 200, y: 260, vx: toPlayer ? -230 : 230, vy: (Math.random() - .5) * 210 }; }
+    function point(who) {
+      if (who === 'player') player++; else opponent++;
+      sound(who === 'player' ? 'win' : 'lose');
+      if (player >= 7 || opponent >= 7) {
+        let won = player > opponent;
+        end(won ? 'Match gewonnen!' : 'Match verloren', `${player} : ${opponent} · bis 7 Punkte`, player, won);
+        return;
       }
-    } else if (k === 'ArrowUp' || k === 'ArrowDown') {
-      for (let col = 0; col < 4; col++) {
-        let column = [grid[col], grid[col+4], grid[col+8], grid[col+12]];
-        if (k === 'ArrowDown') column.reverse();
-        let newCol = slide(column);
-        if (k === 'ArrowDown') newCol.reverse();
-        for (let i = 0; i < 4; i++) {
-          if (grid[col+i*4] !== newCol[i]) changed = true;
-          grid[col+i*4] = newCol[i];
-        }
-      }
+      serve(who === 'player');
     }
-    if (changed) { addTile(); sound(); }
-  });
-  loop(() => {}, () => {
-    x.fillStyle = '#050713'; x.fillRect(0, 0, 400, 400);
-    grid.forEach((v, i) => {
-      let cx = (i % 4) * 95 + 15, cy = Math.floor(i / 4) * 95 + 15;
-      x.fillStyle = v ? '#1a2a5c' : '#101730';
-      x.fillRect(cx, cy, 85, 85);
-      if (v) {
-        x.fillStyle = '#fff'; x.font = 'bold 24px system-ui'; x.textAlign = 'center'; x.textBaseline = 'middle';
-        x.fillText(v, cx + 42.5, cy + 42.5);
+
+    bind(k => {
+      if (k === 'ArrowUp') py -= 38;
+      if (k === 'ArrowDown') py += 38;
+      if (isMultiplayer) {
+        if (k === 'w' || k === 'W') ai -= 38;
+        if (k === 's' || k === 'S') ai += 38;
       }
     });
-    hud(`SCORE <b>${score}</b> · BEST <b>${scoreText('2048')}</b>`);
-  });
-}
 
-// 7. TIC-TAC-TOE
-function ttt() {
-  let [c, x] = canvas(400, 400), board = Array(9).fill(''), turn = 'X', score = 0;
-  c.onpointerdown = e => {
-    let rect = c.getBoundingClientRect();
-    let mx = (e.clientX - rect.left) * 400 / rect.width;
-    let my = (e.clientY - rect.top) * 400 / rect.height;
-    let gx = Math.floor(mx / (400 / 3)), gy = Math.floor(my / (400 / 3));
-    let idx = gy * 3 + gx;
-    if (!board[idx] && turn === 'X') {
-      board[idx] = 'X';
-      sound();
-      checkWin();
-      if (board.includes('')) {
-        turn = 'O';
-        setTimeout(aiMove, 400);
-      }
-    }
-  };
-  cleanup = () => { c.onpointerdown = null; };
-  function aiMove() {
-    let empty = board.map((v, i) => v === '' ? i : null).filter(v => v !== null);
-    if (empty.length) {
-      let move = empty[Math.floor(Math.random() * empty.length)];
-      board[move] = 'O';
-      sound();
-      checkWin();
-      turn = 'X';
-    }
-  }
-  function checkWin() {
-    const wins = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
-    for (let w of wins) {
-      if (board[w[0]] && board[w[0]] === board[w[1]] && board[w[0]] === board[w[2]]) {
-        let winner = board[w[0]];
-        score = winner === 'X' ? 50 : 0;
-        return end(winner === 'X' ? 'Sieg!' : 'Niederlage!', `Gewonnen hat ${winner}`, score, winner === 'X');
-      }
-    }
-    if (!board.includes('')) return end('Unentschieden', 'Keine Züge mehr', 10);
-  }
-  loop(() => {}, () => {
-    x.fillStyle = '#050713'; x.fillRect(0, 0, 400, 400);
-    x.strokeStyle = '#55e6ff'; x.lineWidth = 4;
-    x.beginPath(); x.moveTo(133, 0); x.lineTo(133, 400); x.stroke();
-    x.beginPath(); x.moveTo(266, 0); x.lineTo(266, 400); x.stroke();
-    x.beginPath(); x.moveTo(0, 133); x.lineTo(400, 133); x.stroke();
-    x.beginPath(); x.moveTo(0, 266); x.lineTo(400, 266); x.stroke();
-    board.forEach((v, i) => {
-      if (!v) return;
-      let gx = (i % 3) * 133 + 66, gy = Math.floor(i / 3) * 133 + 66;
-      x.fillStyle = v === 'X' ? '#55e6ff' : '#cb5cff';
-      x.font = 'bold 64px system-ui'; x.textAlign = 'center'; x.textBaseline = 'middle';
-      x.fillText(v, gx, gy);
-    });
-    hud(`TIC-TAC-TOE · BEST <b>${scoreText('ttt')}</b>`);
-  });
-}
+    c.onpointermove = e => {
+      let r = c.getBoundingClientRect();
+      py = (e.clientY - r.top) * 520 / r.height - 40;
+    };
+    cleanup = () => c.onpointermove = null;
 
-// 8. MEMORY CIRCUIT
-function memory() {
-  let [c, x] = canvas(400, 400), icons = ['⚡','🔥','💎','🔮','⚡','🔥','💎','🔮'].sort(() => Math.random() - .5), flipped = [], matched = [], score = 0;
-  c.onpointerdown = e => {
-    let rect = c.getBoundingClientRect();
-    let mx = (e.clientX - rect.left) * 400 / rect.width;
-    let my = (e.clientY - rect.top) * 400 / rect.height;
-    let gx = Math.floor(mx / 100), gy = Math.floor(my / 100);
-    let idx = gy * 4 + gx;
-    if (flipped.length < 2 && !flipped.includes(idx) && !matched.includes(idx)) {
-      flipped.push(idx);
-      sound();
-      if (flipped.length === 2) {
-        if (icons[flipped[0]] === icons[flipped[1]]) {
-          matched.push(...flipped);
-          score += 20;
-          flipped = [];
-          sound('win');
-          if (matched.length === 8) end('Memory Gelöst!', `Score: ${score}`, score, true);
-        } else {
-          setTimeout(() => { flipped = []; }, 600);
-        }
-      }
-    }
-  };
-  cleanup = () => { c.onpointerdown = null; };
-  loop(() => {}, () => {
-    x.fillStyle = '#050713'; x.fillRect(0, 0, 400, 400);
-    icons.forEach((ic, i) => {
-      let gx = (i % 4) * 100 + 10, gy = Math.floor(i / 4) * 100 + 10;
-      x.fillStyle = flipped.includes(i) || matched.includes(i) ? '#243b75' : '#14203e';
-      x.fillRect(gx, gy, 80, 80);
-      if (flipped.includes(i) || matched.includes(i)) {
-        x.fillStyle = '#fff'; x.font = '36px system-ui'; x.textAlign = 'center'; x.textBaseline = 'middle';
-        x.fillText(ic, gx + 40, gy + 40);
-      }
-    });
-    hud(`SCORE <b>${score}</b> · BEST <b>${scoreText('memory')}</b>`);
-  });
-}
+    loop(dt => {
+      py = clamp(py, 0, 440);
 
-// 9. FRUIT MERGE
-function fruit() {
-  let [c, x] = canvas(400, 400), balls = [], dropX = 200, score = 0;
-  c.onpointermove = e => { let r = c.getBoundingClientRect(); dropX = clamp((e.clientX - r.left) * 400 / r.width, 20, 380); };
-  c.onpointerdown = () => {
-    balls.push({ x: dropX, y: 30, r: 16, type: 1, vy: 0 });
-    sound();
-  };
-  cleanup = () => { c.onpointermove = null; c.onpointerdown = null; };
-  loop(dt => {
-    balls.forEach(b => {
-      b.vy += 400 * dt;
-      b.y += b.vy * dt;
-      if (b.y > 380 - b.r) { b.y = 380 - b.r; b.vy = 0; }
-    });
-    for (let i = 0; i < balls.length; i++) {
-      for (let j = i + 1; j < balls.length; j++) {
-        let b1 = balls[i], b2 = balls[j];
-        if (Math.hypot(b1.x - b2.x, b1.y - b2.y) < b1.r + b2.r && b1.type === b2.type && b1.type < 5) {
-          b1.r += 4; b1.type++; score += b1.type * 10;
-          balls.splice(j, 1);
-          sound('win');
-          break;
-        }
-      }
-    }
-    if (balls.some(b => b.y < 50 && b.vy === 0)) return end('Box Voll', `Score: ${score}`, score);
-  }, () => {
-    x.fillStyle = '#050713'; x.fillRect(0, 0, 400, 400);
-    x.fillStyle = '#1e2d5a'; x.fillRect(0, 380, 400, 20);
-    balls.forEach(b => {
-      x.fillStyle = ['#ff6386', '#ffe063', '#72ffae', '#55e6ff', '#cb5cff'][b.type - 1] || '#fff';
-      x.beginPath(); x.arc(b.x, b.y, b.r, 0, Math.PI * 2); x.fill();
-    });
-    hud(`SCORE <b>${score}</b> · BEST <b>${scoreText('fruit')}</b>`);
-  });
-}
-
-// 10. RHYTHM / BEAT REACTOR
-function rhythm() {
-  let [c, x] = canvas(400, 400), notes = [], score = 0, time = 0;
-  bind(k => {
-    if (k === ' ') {
-      let idx = notes.findIndex(n => Math.abs(n.y - 340) < 30);
-      if (idx !== -1) {
-        notes.splice(idx, 1);
-        score += 15;
-        sound('win');
-        burst(200, 340);
+      // KI-Steuerung (Intelligentere vorausschauende Nachführung)
+      if (!isMultiplayer) {
+        let targetY = b.y - 40 + (b.vx > 0 ? (b.vy * 0.15) : 0);
+        ai = clamp(ai + (targetY - ai) * dt * 5.2, 0, 440);
       } else {
-        score = Math.max(0, score - 5);
-        sound('lose');
+        ai = clamp(ai, 0, 440);
+      }
+
+      b.x += b.vx * dt; b.y += b.vy * dt;
+      if (b.y < 6) { b.y = 6; b.vy = Math.abs(b.vy); }
+      if (b.y > 514) { b.y = 514; b.vy = -Math.abs(b.vy); }
+
+      if (b.vx < 0 && b.x <= 28 && b.y >= py - 8 && b.y <= py + 88) {
+        b.x = 28; b.vx = Math.min(410, Math.abs(b.vx) * 1.05); b.vy += (b.y - (py + 40)) * .85;
+      }
+      if (b.vx > 0 && b.x >= 365 && b.y >= ai - 8 && b.y <= ai + 88) {
+        b.x = 365; b.vx = -Math.min(410, Math.abs(b.vx) * 1.05); b.vy += (b.y - (ai + 40)) * .85;
+      }
+      if (b.x < 0) point('opponent'); else if (b.x > 405) point('player');
+    }, () => {
+      x.fillStyle = '#050713'; x.fillRect(0, 0, 400, 520);
+      x.fillStyle = '#263a6e'; for (let y = 0; y < 520; y += 24) x.fillRect(198, y, 4, 14);
+      x.fillStyle = '#55e6ff'; x.fillRect(12, py, 10, 80);
+      x.fillStyle = '#cb5cff'; x.fillRect(378, ai, 10, 80);
+      x.fillStyle = '#ffe063'; x.shadowBlur = 18; x.shadowColor = '#ffe063'; x.fillRect(b.x, b.y, 10, 10); x.shadowBlur = 0;
+      hud(`SPIELER 1 <b>${player}</b> : <b>${opponent}</b> ${isMultiplayer ? 'SPIELER 2' : 'KI'} · BIS 7`);
+    });
+  }
+}
+
+function game2048() { let b = Array.from({ length: 4 }, () => Array(4).fill(0)), score = 0; function add() { let z = []; b.forEach((r, y) => r.forEach((v, x) => !v && z.push([y, x]))); if (z.length) { let [y, x] = z[Math.random() * z.length | 0]; b[y][x] = Math.random() < .9 ? 2 : 4; } } function slide(a) { let q = a.filter(Boolean), out = []; for (let i = 0; i < q.length; i++) { if (q[i] === q[i + 1]) { let v = q[i] * 2; out.push(v); score += v; i++; } else out.push(q[i]); } return out.concat(Array(4 - out.length).fill(0)); } function stuck() { return b.every((r, y) => r.every((v, x) => v && (x === 3 || v !== r[x + 1]) && (y === 3 || v !== b[y + 1][x]))); } function move(k) { let old = JSON.stringify(b); if (k === 'ArrowLeft') b = b.map(slide); if (k === 'ArrowRight') b = b.map(r => slide(r.reverse()).reverse()); if (k === 'ArrowUp' || k === 'ArrowDown') { for (let x = 0; x < 4; x++) { let col = b.map(r => r[x]); if (k === 'ArrowDown') col.reverse(); col = slide(col); if (k === 'ArrowDown') col.reverse(); col.forEach((v, y) => b[y][x] = v); } } if (old !== JSON.stringify(b)) { add(); sound(); render(); if (b.flat().includes(2048)) end('2048 erreicht!', `Score: ${score}`, score, true); else if (b.flat().every(Boolean) && stuck()) end('Keine Züge mehr', `Score: ${score}`, score); } else if (b.flat().every(Boolean) && stuck()) end('Keine Züge mehr', `Score: ${score}`, score); } function render() { $('#gameUI').innerHTML = `<div class="hud">SCORE <b>${score}</b> · BEST <b>${scoreText('2048')}</b></div><div class="board b4" id="b2048"></div><p class="muted" style="text-align:center">Wische oder nutze die Pfeiltasten.</p>`; let colors = { 2: '#1d356a', 4: '#254b82', 8: '#3268a5', 16: '#8354c3', 32: '#b454b0', 64: '#dc597e', 128: '#e88853', 256: '#edb94f', 512: '#eff06a', 1024: '#a6f47b', 2048: '#69ffd2' }; let grid = $('#b2048'); grid.innerHTML = b.flat().map(v => `<div class="tile" style="background:${v ? colors[v] || '#fff' : 'var(--tile)'};color:${v ? '#071125' : 'inherit'}">${v || ''}</div>`).join(''); } add(); add(); render(); bind(move); }
+
+function ttt() { let b = Array(9).fill(''), turn = 'X', score = 0; function win(p) { return [[0, 1, 2], [3, 4, 5], [6, 7, 8], [0, 3, 6], [1, 4, 7], [2, 5, 8], [0, 4, 8], [2, 4, 6]].some(c => c.every(i => p[i] === turn)); } function ai() { let empty = b.map((v, i) => v === '' ? i : null).filter(v => v !== null); if (!empty.length) return; let pick = empty[Math.random() * empty.length | 0]; b[pick] = 'O'; if (win(b)) { render(); end('KI gewinnt', `Match beendet.`, score); return; } turn = 'X'; render(); } function click(i) { if (b[i] || turn !== 'X' || roundEnded) return; b[i] = 'X'; sound(); if (win(b)) { score = 100; render(); end('Sieg!', `Du hast die KI besiegt!`, score, true); return; } if (b.every(Boolean)) { render(); end('Unentschieden', `Kein Sieger.`, score); return; } turn = 'O'; render(); setTimeout(ai, 300); } function render() { $('#gameUI').innerHTML = `<div class="hud">SPIELER (X) vs KI (O) · BEST <b>${scoreText('ttt')}</b></div><div class="board ttt">${b.map((v, i) => `<button class="${v.toLowerCase()}" onclick="tttClick(${i})">${v}</button>`).join('')}</div>`; window.tttClick = click; } render(); }
+
+function memory() { let icons = ['⚡', '🔥', '💎', '🚀', '🎮', '🎲', '🎯', '👾'], cards = [...icons, ...icons].sort(() => Math.random() - .5), open = [], matched = [], moves = 0; function click(i) { if (open.length >= 2 || open.includes(i) || matched.includes(i) || roundEnded) return; open.push(i); sound(); render(); if (open.length === 2) { moves++; let [a, b] = open; if (cards[a] === cards[b]) { matched.push(a, b); open = []; sound('win'); render(); if (matched.length === cards.length) { let score = Math.max(10, 200 - moves * 10); end('Geschafft!', `Gefunden in ${moves} Zügen.`, score, true); } } else setTimeout(() => { open = []; render(); }, 800); } } function render() { $('#gameUI').innerHTML = `<div class="hud">ZÜGE <b>${moves}</b> · BEST <b>${scoreText('memory')}</b></div><div class="board memory">${cards.map((c, i) => `<button class="${open.includes(i) || matched.includes(i) ? 'open' : ''}" onclick="memClick(${i})">${open.includes(i) || matched.includes(i) ? c : ''}</button>`).join('')}</div>`; window.memClick = click; } render(); }
+
+// 5. FRUIT MERGE (Verbesserte Physik, Container-Glas, 7 Stufen/Formen, Cooldown & Vorschau)
+function fruit() {
+  let [c, x] = canvas(360, 520), fruits = [], score = 0, cooldown = 0,
+    dropper = { x: 180 }, consecutiveSameCount = 0, lastType = -1;
+
+  // 7 Stufen mit verschiedenen Formen und Farben
+  const types = [
+    { r: 14, c: '#ff6386', sides: 0, label: '●' },   // Stufe 0: Klein Kreis
+    { r: 20, c: '#55e6ff', sides: 0, label: '●' },   // Stufe 1: Kreis
+    { r: 28, c: '#ffe063', sides: 4, label: '■' },   // Stufe 2: Quadrat
+    { r: 36, c: '#72ffae', sides: 5, label: '⬟' },   // Stufe 3: Fünfeck
+    { r: 45, c: '#cb5cff', sides: 6, label: '⬢' },   // Stufe 4: Sechseck
+    { r: 56, c: '#ff9d70', sides: 8, label: '⯁' },   // Stufe 5: Achteck
+    { r: 68, c: '#75ffbe', sides: 0, label: '👑' }   // Stufe 6: Große Krone
+  ];
+
+  function getNextType() {
+    let rolled = Math.floor(Math.random() * 3); // Zufällig aus Stufe 0, 1 oder 2
+    if (rolled === lastType) {
+      consecutiveSameCount++;
+      if (consecutiveSameCount >= 3) {
+        rolled = 2; // Automatisch etwas größere Form wählen bei zu vielen Wiederholungen
+        consecutiveSameCount = 0;
+      }
+    } else {
+      consecutiveSameCount = 1;
+      lastType = rolled;
+    }
+    return rolled;
+  }
+
+  let nextType = getNextType();
+
+  function drop() {
+    if (cooldown > 0 || roundEnded) return;
+    fruits.push({ x: dropper.x, y: 70, vx: 0, vy: 120, type: nextType });
+    sound();
+    cooldown = 1.3; // ~1.3 Sekunden Drop-Cooldown
+    nextType = getNextType();
+  }
+
+  bind(k => { if (k === ' ' || k === 'ArrowDown') drop(); });
+  c.onpointermove = e => { let r = c.getBoundingClientRect(); dropper.x = clamp((e.clientX - r.left) * 360 / r.width, 45, 315); };
+  c.onpointerdown = drop;
+  cleanup = () => { c.onpointermove = null; c.onpointerdown = null; };
+
+  loop(dt => {
+    if (cooldown > 0) cooldown -= dt;
+
+    // Physikalische Bewegung & Gravitation
+    fruits.forEach(f => {
+      f.vy += 380 * dt;
+      f.x += f.vx * dt;
+      f.y += f.vy * dt;
+      f.vx *= 0.96; // Reibung
+
+      // Glas-Grenzen (Container)
+      let r = types[f.type].r;
+      if (f.x < 35 + r) { f.x = 35 + r; f.vx = Math.abs(f.vx) * 0.3; }
+      if (f.x > 325 - r) { f.x = 325 - r; f.vx = -Math.abs(f.vx) * 0.3; }
+      if (f.y > 480 - r) { f.y = 480 - r; f.vy = 0; f.vx *= 0.8; }
+    });
+
+    // Stabile Kollision & Zusammenfügen (Merge)
+    for (let i = 0; i < fruits.length; i++) {
+      for (let j = i + 1; j < fruits.length; j++) {
+        let a = fruits[i], b = fruits[j], dx = b.x - a.x, dy = b.y - a.y,
+          dist = Math.hypot(dx, dy), minDist = types[a.type].r + types[b.type].r;
+
+        if (dist < minDist) {
+          if (a.type === b.type && a.type < types.length - 1) {
+            a.type++; score += (a.type + 1) * 15;
+            a.vx = (a.vx + b.vx) * 0.5; a.vy = (a.vy + b.vy) * 0.5;
+            fruits.splice(j, 1);
+            sound('win');
+            break;
+          } else {
+            // Physikalische Positionskorrektur (Verhindert Durchdringen)
+            let overlap = minDist - dist;
+            let nx = dx / (dist || 1), ny = dy / (dist || 1);
+            a.x -= nx * overlap * 0.5; a.y -= ny * overlap * 0.5;
+            b.x += nx * overlap * 0.5; b.y += ny * overlap * 0.5;
+          }
+        }
       }
     }
-  });
-  loop(dt => {
-    time += dt;
-    if (Math.random() < 0.03) notes.push({ y: 0, speed: 180 + Math.min(150, score * 2) });
-    notes.forEach(n => n.y += n.speed * dt);
-    if (notes.some(n => n.y > 400)) return end('Rhythmus verloren', `Score: ${score}`, score);
+
+    // Verlust-Linie Prüfung (Verlust, wenn über der Linie gestapelt)
+    let overflow = fruits.some(f => f.y - types[f.type].r < 100 && Math.abs(f.vy) < 10);
+    if (overflow && cooldown <= 0) return end('Glas überfüllt!', `Score: ${score}`, score);
   }, () => {
-    x.fillStyle = '#050713'; x.fillRect(0, 0, 400, 400);
-    x.fillStyle = 'rgba(85, 230, 255, 0.2)'; x.fillRect(50, 330, 300, 20);
-    notes.forEach(n => {
-      x.fillStyle = '#ff6386'; x.fillRect(175, n.y, 50, 20);
+    x.fillStyle = '#050713'; x.fillRect(0, 0, 360, 520);
+
+    // Glas Container Zeichnen
+    x.strokeStyle = 'rgba(123, 198, 255, 0.4)'; x.lineWidth = 4;
+    x.strokeRect(30, 90, 300, 400);
+    x.fillStyle = 'rgba(18, 24, 51, 0.35)'; x.fillRect(30, 90, 300, 400);
+
+    // Gestrichelte weiße Verlust-Linie
+    x.strokeStyle = 'rgba(255, 255, 255, 0.6)'; x.lineWidth = 2; x.setLineDash([6, 6]);
+    x.beginPath(); x.moveTo(30, 110); x.lineTo(330, 110); x.stroke(); x.setLineDash([]);
+
+    // Formen/Früchte Zeichnen
+    fruits.forEach(f => {
+      let t = types[f.type];
+      x.fillStyle = t.c; x.shadowColor = t.c; x.shadowBlur = 10;
+      
+      if (t.sides === 0) {
+        x.beginPath(); x.arc(f.x, f.y, t.r, 0, Math.PI * 2); x.fill();
+      } else {
+        x.beginPath();
+        for (let s = 0; s < t.sides; s++) {
+          let a = (s * Math.PI * 2) / t.sides;
+          let px = f.x + t.r * Math.cos(a), py = f.y + t.r * Math.sin(a);
+          s === 0 ? x.moveTo(px, py) : x.lineTo(px, py);
+        }
+        x.closePath(); x.fill();
+      }
+      x.shadowBlur = 0;
+      x.fillStyle = '#000'; x.font = 'bold 12px system-ui'; x.textAlign = 'center';
+      x.fillText(t.label, f.x, f.y + 4);
     });
-    hud(`SCORE <b>${score}</b> · BEST <b>${scoreText('rhythm')}</b>`);
+
+    // Vorschau des nächsten Balls mit Drop-Abstand
+    let previewType = types[nextType];
+    x.fillStyle = previewType.c; x.globalAlpha = cooldown > 0 ? 0.3 : 0.85;
+    x.beginPath(); x.arc(dropper.x, 50, previewType.r * 0.7, 0, Math.PI * 2); x.fill(); x.globalAlpha = 1;
+
+    let cooldownText = cooldown > 0 ? ` · ⏳ <b>${cooldown.toFixed(1)}s</b>` : '';
+    hud(`SCORE <b>${score}</b> · BEST <b>${scoreText('fruit')}</b>${cooldownText}`);
   });
 }
+
+// 6. BEAT REAKTOR (5 Leben, Toleranz, PERFEKT-Popup & Partikel-Animationen)
+function rhythm() {
+  let [c, x] = canvas(360, 500), notes = [], score = 0, acc = 0, lives = 5,
+    feedbackText = '', feedbackTimer = 0, feedbackColor = '#55e6ff';
+
+  function triggerHit(isKeyTrigger = true) {
+    let hitIndex = notes.findIndex(n => Math.abs(n.y - 420) < 45);
+
+    if (hitIndex !== -1) {
+      let diff = Math.abs(notes[hitIndex].y - 420);
+      if (diff <= 14) { // Perfekter Treffer
+        score += 30;
+        feedbackText = 'PERFEKT!';
+        feedbackColor = '#ffe063';
+        burst(innerWidth / 2, innerHeight / 2 - 20);
+        sound('win');
+      } else { // Guter Treffer innerhalb der Toleranz
+        score += 15;
+        feedbackText = 'GUT!';
+        feedbackColor = '#72ffae';
+        sound();
+      }
+      feedbackTimer = 0.6;
+      notes.splice(hitIndex, 1);
+    } else if (isKeyTrigger) { // Leertaste zu früh/falsch gedrückt
+      lives--;
+      feedbackText = 'FEHLER!';
+      feedbackColor = '#ff6386';
+      feedbackTimer = 0.6;
+      sound('lose');
+      if (lives <= 0) return end('Keine Herzen mehr', `Score: ${score}`, score);
+    }
+  }
+
+  bind(k => { if (k === ' ' || k === 'ArrowDown') triggerHit(true); });
+
+  loop(dt => {
+    acc += dt;
+    if (feedbackTimer > 0) feedbackTimer -= dt;
+
+    if (acc > 0.75) {
+      acc = 0;
+      notes.push({ y: 0 });
+    }
+
+    notes.forEach(n => n.y += 230 * dt);
+
+    // Verpasster Beat
+    for (let i = notes.length - 1; i >= 0; i--) {
+      if (notes[i].y > 465) {
+        notes.splice(i, 1);
+        lives--;
+        feedbackText = 'VERPASST!';
+        feedbackColor = '#ff6386';
+        feedbackTimer = 0.6;
+        sound('lose');
+        if (lives <= 0) return end('Keine Herzen mehr', `Score: ${score}`, score);
+      }
+    }
+  }, () => {
+    x.fillStyle = '#050713'; x.fillRect(0, 0, 360, 500);
+
+    // Zielbereich (Hit-Zone) mit Glow
+    x.fillStyle = 'rgba(22, 40, 88, 0.8)'; x.fillRect(0, 405, 360, 30);
+    x.strokeStyle = '#55e6ff'; x.lineWidth = 2; x.shadowColor = '#55e6ff'; x.shadowBlur = 10;
+    x.strokeRect(0, 405, 360, 30); x.shadowBlur = 0;
+
+    // Beats (Fallende Noten)
+    x.fillStyle = '#55e6ff';
+    notes.forEach(n => {
+      x.shadowColor = '#55e6ff'; x.shadowBlur = 8;
+      x.fillRect(130, n.y, 100, 16);
+    });
+    x.shadowBlur = 0;
+
+    // "PERFEKT!" & Treffer-Feedback Text unter dem Trefferbereich
+    if (feedbackTimer > 0) {
+      x.fillStyle = feedbackColor; x.font = 'bold 22px system-ui'; x.textAlign = 'center';
+      x.shadowColor = feedbackColor; x.shadowBlur = 12;
+      x.fillText(feedbackText, 180, 465);
+      x.shadowBlur = 0;
+    }
+
+    hud(`HERZEN: <b>${'❤️'.repeat(lives)}</b> (${lives}/5) · SCORE <b>${score}</b>`);
+  });
+}
+
+renderMeta();
+renderGames();
