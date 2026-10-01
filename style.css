@@ -496,4 +496,3 @@ table.lb-table th { background: rgba(0,0,0,0.3); color: var(--a); font-size: 0.8
 .rank-3 { color: #d97706; font-weight: bold; }
 .score-val { font-family: monospace; color: var(--a); font-weight: bold; }
 .lb-tabs { display: flex; gap: 8px; margin-bottom: 12px; }
- 
