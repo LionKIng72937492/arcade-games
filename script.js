@@ -14,6 +14,9 @@ const firebaseConfig = {
 const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
+// HIER KANNST DU DEN OWNER-NAMEN ÄNDERN:
+const OWNER_NAME = "Asllan";
+
 let currentCategory = 'coins';
 
 // SPEICHER-DATENBANK LOGIK
@@ -88,7 +91,7 @@ function loadLeaderboardData(category) {
 
     ownerRow.innerHTML = `
       <td class="rank-1">#1</td>
-      <td>LionKIng72937492 <span class="owner-badge">👑 OWNER</span></td>
+      <td>${OWNER_NAME} <span class="owner-badge">👑 OWNER</span></td>
       <td class="score-val">${ownerScoreText}</td>
     `;
     tbody.appendChild(ownerRow);
@@ -96,7 +99,7 @@ function loadLeaderboardData(category) {
     let rank = 2;
     snapshot.forEach((doc) => {
       const data = doc.data();
-      if (data.playerName !== "LionKIng72937492") {
+      if (data.playerName !== OWNER_NAME) {
         const row = document.createElement('tr');
         let rankClass = rank === 2 ? "rank-2" : rank === 3 ? "rank-3" : "";
         let scoreDisplay = data[category] || 0;
@@ -129,7 +132,7 @@ function renderLeaderboard() {
 }
 window.renderLeaderboard = renderLeaderboard;
 
-// SPIL-HELFER UND LOGIK
+// SPIEL-HELFER UND LOGIK
 const $ = s => document.querySelector(s);
 const clamp = (n, a, b) => Math.max(a, Math.min(b, n));
 
@@ -309,7 +312,7 @@ $('#reset').onclick = () => {
   }
 };
 
-// 7-TAGE SPERRE FÜR DEN SPIELERNAME
+// 7-TAGE SPERRE FÜR DEN SPIELERNAME & SOFORTIGES SPEICHERN BEIM BEENDEN DER EINGABE / ENTER
 const pInput = $('#playerName');
 const SEVEN_DAYS = 7 * 24 * 60 * 60 * 1000;
 
@@ -328,13 +331,14 @@ function updateNameInputUI() {
   } else {
     pInput.disabled = false;
     pInput.style.opacity = '1';
-    if (nameHint) nameHint.textContent = `✏️ Namensänderung frei (nur alle 7 Tage möglich)`;
+    if (nameHint) nameHint.textContent = `✏️️ Namensänderung frei (Drücke Enter zum Speichern)`;
   }
 }
 
 if (pInput) {
   updateNameInputUI();
-  pInput.onchange = () => {
+
+  const handleNameSave = () => {
     const newName = pInput.value.trim().slice(0, 18);
     if (!newName) {
       pInput.value = save.playerName || '';
@@ -353,13 +357,22 @@ if (pInput) {
     if (save.playerName !== newName) {
       save.playerName = newName;
       save.lastNameChange = now;
-      toast('Spielername gespeichert!');
+      toast('Name aktualisiert!');
       persist();
       updateNameInputUI();
+      renderLeaderboard();
+    }
+  };
+
+  pInput.onchange = handleNameSave;
+  pInput.onkeydown = (e) => {
+    if (e.key === 'Enter') {
+      pInput.blur();
     }
   };
 }
 
+// GAME ENGINES & LOOPS
 let active = '', raf = 0, last = 0, roundEnded = false, cleanup = () => { };
 function stop() { cancelAnimationFrame(raf); cleanup(); cleanup = () => { }; last = 0; }
 function loop(update, draw) { function f(t) { let dt = Math.min(.05, (t - last || t) / 1000); last = t; update(dt); draw(); if (!roundEnded) raf = requestAnimationFrame(f); } raf = requestAnimationFrame(f); }
@@ -389,9 +402,59 @@ function ttt() { let b = Array(9).fill(''), turn = 'X', score = 0; function win(
 
 function memory() { let icons = ['⚡', '🔥', '💎', '🚀', '🎮', '🎲', '🎯', '👾'], cards = [...icons, ...icons].sort(() => Math.random() - .5), open = [], matched = [], moves = 0; function click(i) { if (open.length >= 2 || open.includes(i) || matched.includes(i) || roundEnded) return; open.push(i); sound(); render(); if (open.length === 2) { moves++; let [a, b] = open; if (cards[a] === cards[b]) { matched.push(a, b); open = []; sound('win'); render(); if (matched.length === cards.length) { let score = Math.max(10, 200 - moves * 10); end('Geschafft!', `Gefunden in ${moves} Zügen.`, score, true); } } else setTimeout(() => { open = []; render(); }, 800); } } function render() { $('#gameUI').innerHTML = `<div class="hud">ZÜGE <b>${moves}</b> · BEST <b>${scoreText('memory')}</b></div><div class="board memory">${cards.map((c, i) => `<button class="${open.includes(i) || matched.includes(i) ? 'open' : ''}" onclick="memClick(${i})">${open.includes(i) || matched.includes(i) ? c : ''}</button>`).join('')}</div>`; window.memClick = click; } render(); }
 
-function fruit() { let [c, x] = canvas(360, 520), fruits = [], dropper = { x: 180 }, score = 0; const types = [{ r: 12, c: '#ff6386' }, { r: 18, c: '#55e6ff' }, { r: 25, c: '#ffe063' }, { r: 34, c: '#cb5cff' }, { r: 45, c: '#72ffae' }]; function drop() { fruits.push({ x: dropper.x, y: 40, vx: 0, vy: 100, type: 0 }); sound(); } c.onpointermove = e => { let r = c.getBoundingClientRect(); dropper.x = clamp((e.clientX - r.left) * 360 / r.width, 20, 340); }; c.onpointerdown = drop; cleanup = () => { c.onpointermove = null; c.onpointerdown = null; }; loop(dt => { fruits.forEach(f => { f.y += f.vy * dt; if (f.y > 500 - types[f.type].r) f.y = 500 - types[f.type].r; }); for (let i = 0; i < fruits.length; i++) { for (let j = i + 1; j < fruits.length; j++) { let a = fruits[i], b = fruits[j], dx = b.x - a.x, dy = b.y - a.y, dist = Math.hypot(dx, dy), minDist = types[a.type].r + types[b.type].r; if (dist < minDist && a.type === b.type && a.type < types.length - 1) { a.type++; score += (a.type + 1) * 10; fruits.splice(j, 1); sound('win'); break; } } } }, () => { x.fillStyle = '#050713'; x.fillRect(0, 0, 360, 520); x.fillStyle = '#16234c'; x.fillRect(0, 500, 360, 20); fruits.forEach(f => { let t = types[f.type]; x.fillStyle = t.c; x.beginPath(); x.arc(f.x, f.y, t.r, 0, Math.PI * 2); x.fill(); }); x.strokeStyle = '#55e6ff'; x.beginPath(); x.moveTo(dropper.x, 10); x.lineTo(dropper.x, 40); x.stroke(); hud(`SCORE <b>${score}</b> · BEST <b>${scoreText('fruit')}</b>`); }); }
+function fruit() {
+  let [c, x] = canvas(360, 520), fruits = [], dropper = { x: 180 }, score = 0;
+  const types = [{ r: 12, c: '#ff6386' }, { r: 18, c: '#55e6ff' }, { r: 25, c: '#ffe063' }, { r: 34, c: '#cb5cff' }, { r: 45, c: '#72ffae' }];
+  function drop() { fruits.push({ x: dropper.x, y: 40, vx: 0, vy: 100, type: 0 }); sound(); }
+  c.onpointermove = e => { let r = c.getBoundingClientRect(); dropper.x = clamp((e.clientX - r.left) * 360 / r.width, 20, 340); };
+  c.onpointerdown = drop;
+  cleanup = () => { c.onpointermove = null; c.onpointerdown = null; };
+  loop(dt => {
+    fruits.forEach(f => {
+      f.y += f.vy * dt;
+      if (f.y > 500 - types[f.type].r) f.y = 500 - types[f.type].r;
+    });
+    for (let i = 0; i < fruits.length; i++) {
+      for (let j = i + 1; j < fruits.length; j++) {
+        let a = fruits[i], b = fruits[j], dx = b.x - a.x, dy = b.y - a.y, dist = Math.hypot(dx, dy), minDist = types[a.type].r + types[b.type].r;
+        if (dist < minDist && a.type === b.type && a.type < types.length - 1) {
+          a.type++; score += (a.type + 1) * 10; fruits.splice(j, 1); sound('win'); break;
+        }
+      }
+    }
+  }, () => {
+    x.fillStyle = '#050713'; x.fillRect(0, 0, 360, 520);
+    x.fillStyle = '#16234c'; x.fillRect(0, 500, 360, 20);
+    fruits.forEach(f => {
+      let t = types[f.type];
+      x.fillStyle = t.c; x.beginPath(); x.arc(f.x, f.y, t.r, 0, Math.PI * 2); x.fill();
+    });
+    x.strokeStyle = '#55e6ff'; x.beginPath(); x.moveTo(dropper.x, 10); x.lineTo(dropper.x, 40); x.stroke();
+    hud(`SCORE <b>${score}</b> · BEST <b>${scoreText('fruit')}</b>`);
+  });
+}
 
-function rhythm() { let [c, x] = canvas(360, 500), notes = [], score = 0, acc = 0; bind(k => { if (k === ' ' || k === 'ArrowDown') { let hit = notes.find(n => Math.abs(n.y - 430) < 35); if (hit) { score += 20; notes = notes.filter(n => n !== hit); sound('win'); } else sound('lose'); } }); loop(dt => { acc += dt; if (acc > .7) { acc = 0; notes.push({ y: 0 }); } notes.forEach(n => n.y += 240 * dt); if (notes.some(n => n.y > 480)) return end('Beat verpasst', `Score: ${score}`, score); notes = notes.filter(n => n.y <= 480); }, () => { x.fillStyle = '#050713'; x.fillRect(0, 0, 360, 500); x.fillStyle = '#162858'; x.fillRect(0, 420, 360, 20); x.fillStyle = '#55e6ff'; notes.forEach(n => x.fillRect(150, n.y, 60, 15)); hud(`SCORE <b>${score}</b> · BEST <b>${scoreText('rhythm')}</b>`); }); }
+function rhythm() {
+  let [c, x] = canvas(360, 500), notes = [], score = 0, acc = 0;
+  bind(k => {
+    if (k === ' ' || k === 'ArrowDown') {
+      let hit = notes.find(n => Math.abs(n.y - 430) < 35);
+      if (hit) { score += 20; notes = notes.filter(n => n !== hit); sound('win'); } else sound('lose');
+    }
+  });
+  loop(dt => {
+    acc += dt;
+    if (acc > .7) { acc = 0; notes.push({ y: 0 }); }
+    notes.forEach(n => n.y += 240 * dt);
+    if (notes.some(n => n.y > 480)) return end('Beat verpasst', `Score: ${score}`, score);
+    notes = notes.filter(n => n.y <= 480);
+  }, () => {
+    x.fillStyle = '#050713'; x.fillRect(0, 0, 360, 500);
+    x.fillStyle = '#162858'; x.fillRect(0, 420, 360, 20);
+    x.fillStyle = '#55e6ff'; notes.forEach(n => x.fillRect(150, n.y, 60, 15));
+    hud(`SCORE <b>${score}</b> · BEST <b>${scoreText('rhythm')}</b>`);
+  });
+}
 
 renderMeta();
 renderGames();
