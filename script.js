@@ -27,97 +27,14 @@ const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
 
-const OWNER_NAME = "LionKIng72937492";
+const OWNER_NAMES = ["asllan", "asllan."];
 
 
-// OWNER-GERÄTEERKENNUNG
+function isOwnerName(name) {
 
-// Der Browser stellt Webseiten keine echte Hardware-/Seriennummer zur Verfügung.
-
-// Deshalb wird aus stabilen Browser-/Gerätemerkmalen ein lokaler Geräte-Schlüssel
-
-// gebildet. Beim ersten Öffnen auf deinem Owner-PC wird dieser Schlüssel gebunden.
-
-const OWNER_DEVICE_STORAGE = "neonArcadeOwnerDevice2026";
-
-const DEVICE_BIND_VERSION = "v1";
-
-
-function getDeviceKey() {
-
-  const parts = [
-
-    DEVICE_BIND_VERSION,
-
-    navigator.userAgent || "",
-
-    navigator.platform || "",
-
-    navigator.language || "",
-
-    Intl.DateTimeFormat().resolvedOptions().timeZone || "",
-
-    String(screen.width || 0),
-
-    String(screen.height || 0),
-
-    String(screen.colorDepth || 0),
-
-    String(navigator.hardwareConcurrency || 0),
-
-    String(navigator.deviceMemory || 0),
-
-    String(navigator.maxTouchPoints || 0)
-
-  ].join("|");
-
-
-  let hash = 2166136261;
-
-  for (let i = 0; i < parts.length; i++) {
-
-    hash ^= parts.charCodeAt(i);
-
-    hash = Math.imul(hash, 16777619);
-
-  }
-
-
-  return "dev_" + (hash >>> 0).toString(16).padStart(8, "0");
+  return OWNER_NAMES.includes(String(name || "").trim().toLowerCase());
 
 }
-
-
-const CURRENT_DEVICE_KEY = getDeviceKey();
-
-
-function isOwnerDevice() {
-
-  return localStorage.getItem(OWNER_DEVICE_STORAGE) === CURRENT_DEVICE_KEY;
-
-}
-
-
-function bindOwnerDeviceIfNeeded() {
-
-  // Nur der bereits festgelegte Owner-Account darf den ersten Owner-PC binden.
-
-  if (
-
-    save?.playerName &&
-
-    save.playerName.toLowerCase() === OWNER_NAME.toLowerCase() &&
-
-    !localStorage.getItem(OWNER_DEVICE_STORAGE)
-
-  ) {
-
-    localStorage.setItem(OWNER_DEVICE_STORAGE, CURRENT_DEVICE_KEY);
-
-  }
-
-}
-
 
 let currentCategory = "coins";
 
@@ -493,168 +410,61 @@ function loadLeaderboardData(category) {
       tbody.innerHTML = "";
 
 
-      // OWNER
-
-      let ownerRow =
-
-        document.createElement("tr");
-
-
-      ownerRow.classList.add(
-
-        "owner-row"
-
-      );
-
-
-      let ownerScoreText =
-
-        "999'999";
-
-
-      if (category === "xp") {
-
-        ownerScoreText =
-
-          "500'000 XP";
-
-      }
-
-
-      if (category === "time") {
-
-        ownerScoreText =
-
-          "250 Std.";
-
-      }
-
-
-      ownerRow.innerHTML = `
-
-        <td class="rank-1">#1</td>
-
-        <td>
-
-          <span class="lb-banner banner-gold"></span>
-
-          ${OWNER_NAME}
-
-          <span class="owner-badge">
-
-            👑 OWNER
-
-          </span>
-
-        </td>
-
-        <td class="score-val">
-
-          ${ownerScoreText}
-
-        </td>
-
-      `;
-
-
-      tbody.appendChild(ownerRow);
-
-
-      let rank = 2;
+      let rank = 1;
 
 
       snapshot.forEach((docSnap) => {
 
-        const data =
+        const data = docSnap.data();
 
-          docSnap.data();
+        const playerName = data.playerName || "Anonym";
 
-
-        if (
-
-          data.playerName !==
-
-          OWNER_NAME
-
-        ) {
-
-          const row =
-
-            document.createElement(
-
-              "tr"
-
-            );
+        const owner = isOwnerName(playerName);
 
 
-          let rankClass =
+        const row = document.createElement("tr");
 
-            rank === 2
-
-              ? "rank-2"
-
-              : rank === 3
-
-              ? "rank-3"
-
-              : "";
+        if (owner) row.classList.add("owner-row");
 
 
-          let scoreDisplay =
+        const rankClass =
 
-            data[category] || 0;
+          rank === 1 ? "rank-1" :
 
+          rank === 2 ? "rank-2" :
 
-          if (category === "xp") {
-
-            scoreDisplay += " XP";
-
-          }
+          rank === 3 ? "rank-3" : "";
 
 
-          if (category === "time") {
+        let scoreDisplay = data[category] || 0;
 
-            scoreDisplay += " Std.";
+        if (category === "xp") scoreDisplay += " XP";
 
-          }
-
-
-          row.innerHTML = `
-
-            <td class="${rankClass}">
-
-              #${rank}
-
-            </td>
-
-            <td>
-
-              <span class="lb-banner ${
-
-                data.activeBanner ||
-
-                "banner-none"
-
-              }"></span>
-
-              ${data.playerName || "Anonym"}
-
-            </td>
-
-            <td class="score-val">
-
-              ${scoreDisplay}
-
-            </td>
-
-          `;
+        if (category === "time") scoreDisplay += " Std.";
 
 
-          tbody.appendChild(row);
+        row.innerHTML = `
 
-          rank++;
+          <td class="${rankClass}">#${rank}</td>
 
-        }
+          <td>
+
+            <span class="lb-banner ${data.activeBanner || "banner-none"}"></span>
+
+            ${playerName}
+
+            ${owner ? '<span class="owner-badge">👑 OWNER</span>' : ''}
+
+          </td>
+
+          <td class="score-val">${scoreDisplay}</td>
+
+        `;
+
+
+        tbody.appendChild(row);
+
+        rank++;
 
       });
 
@@ -935,8 +745,6 @@ function renderMeta() {
     save.theme;
 
 
-  bindOwnerDeviceIfNeeded();
-
   checkOwnerPanelVisibility();
 
 }
@@ -986,10 +794,7 @@ function checkOwnerPanelVisibility() {
   if (!ownerContainer) return;
 
 
-  bindOwnerDeviceIfNeeded();
-
-
-  const isOwner = isOwnerDevice();
+  const isOwner = isOwnerName(save.playerName);
 
 
   ownerContainer.style.display =
@@ -1116,13 +921,6 @@ function checkOwnerPanelVisibility() {
 
       </div>
 
-
-      <div class="owner-warning" style="margin-top:8px;">
-
-        Owner-Gerät erkannt · Geräte-ID: <code>${CURRENT_DEVICE_KEY}</code>
-
-      </div>
-
     </div>
 
   `;
@@ -1132,11 +930,11 @@ function checkOwnerPanelVisibility() {
 
 async function executeOwnerAction() {
 
-  if (!isOwnerDevice()) {
+  if (!isOwnerName(save.playerName)) {
 
     return toast(
 
-      "Dieses Gerät ist nicht als Owner-PC freigegeben!"
+      "Keine Berechtigung!"
 
     );
 
@@ -2430,21 +2228,15 @@ document
 
 function showView(v) {
 
-  if (
+  // Beim Verlassen eines Spiels immer den aktuellen Game-Loop sauber stoppen.
 
-    v !== "game" &&
+  // Die alte Version rief hier quitGame() auf, obwohl diese Funktion nicht existierte.
 
-    active &&
+  if (v !== "game") {
 
-    $("#game").classList.contains(
+    stop();
 
-      "active"
-
-    )
-
-  ) {
-
-    quitGame();
+    active = "";
 
   } else {
 
@@ -2831,9 +2623,7 @@ if (pInput) {
 
           nameTaken &&
 
-          newName.toLowerCase() !==
-
-            OWNER_NAME.toLowerCase()
+          !isOwnerName(newName)
 
         ) {
 
@@ -3384,6 +3174,15 @@ function launch(id) {
 
 
 window.launch = launch;
+
+
+// Neu-Button im Game-Menü
+
+$("#restart").onclick = () => {
+
+  if (active) launch(active);
+
+};
 
 
 let sessionId = 0;
