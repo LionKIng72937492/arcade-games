@@ -18,7 +18,7 @@
       <button class="soft" onclick="showView('settings')" aria-label="Einstellungen">⚙</button>
     </div>
   </header>
-  
+
   <nav class="tabs">
     <button class="tab active" data-view="hub">Spiele</button>
     <button class="tab" data-view="shop">Shop</button>
@@ -47,15 +47,25 @@
       <h1>Live Rangliste</h1>
       <p>Echtzeit-Synchronisation mit Firebase Cloud Firestore.</p>
     </div>
+
     <div class="panel settings" style="max-width:100%;">
       <div class="row">
         <span>Dein Spielername</span>
-        <input id="playerName" maxlength="18" placeholder="Dein Name" style="background:#16234c;border:1px solid var(--line);padding:9px;border-radius:9px;color:var(--ink);transition:0.2s opacity;">
+        <input
+          id="playerName"
+          maxlength="18"
+          placeholder="Dein Name"
+          style="background:#16234c;border:1px solid var(--line);padding:9px;border-radius:9px;color:var(--ink);transition:0.2s opacity;"
+        >
       </div>
-      <div id="nameChangeHint" style="font-size:0.78rem; color:var(--muted); text-align:right; margin-top:-6px; margin-bottom:10px;">
+
+      <div
+        id="nameChangeHint"
+        style="font-size:0.78rem;color:var(--muted);text-align:right;margin-top:-6px;margin-bottom:10px;"
+      >
         ✏️ Namensänderung nur alle 7 Tage möglich.
       </div>
-      
+
       <div class="lb-tabs" style="margin-top:15px;">
         <button class="soft active" id="btn-coins" onclick="switchCategory('coins')">🪙 Münzen</button>
         <button class="soft" id="btn-xp" onclick="switchCategory('xp')">⭐ XP</button>
@@ -71,7 +81,11 @@
           </tr>
         </thead>
         <tbody id="leaderboardRows">
-          <tr><td colspan="3" style="text-align:center;">Lade Daten aus Firebase...</td></tr>
+          <tr>
+            <td colspan="3" style="text-align:center;">
+              Lade Daten aus Firebase...
+            </td>
+          </tr>
         </tbody>
       </table>
     </div>
@@ -80,10 +94,12 @@
   <section class="view" id="settings">
     <div class="panel settings">
       <h2>Profil & Einstellungen</h2>
+
       <div class="row">
         <span>Sound-Effekte</span>
         <button class="soft" id="soundBtn">An</button>
       </div>
+
       <div class="row">
         <span>Aktives Farbschema</span>
         <select id="themeSelect">
@@ -93,11 +109,15 @@
           <option value="amber">Amber</option>
         </select>
       </div>
+
       <div class="row">
         <span>XP</span>
         <b id="xp">0</b>
       </div>
-      <button class="soft" id="reset">Fortschritt zurücksetzen</button>
+
+      <button class="soft" id="reset">
+        Fortschritt zurücksetzen
+      </button>
     </div>
   </section>
 
@@ -107,6 +127,7 @@
       <h2 id="gameTitle">Spiel</h2>
       <button class="soft" id="restart">↻ Neu</button>
     </div>
+
     <div class="panel gamearea">
       <div id="gameUI"></div>
     </div>
@@ -114,12 +135,17 @@
 </main>
 
 <div class="toast" id="toast"></div>
+
 <div class="modal" id="modal">
   <div class="panel">
     <h2 id="modalTitle">Runde vorbei</h2>
     <p id="modalText"></p>
-    <button class="soft" id="modalRestart">Nochmal spielen</button>
-    <button class="soft" onclick="showView('hub')">Zum Menü</button>
+    <button class="soft" id="modalRestart">
+      Nochmal spielen
+    </button>
+    <button class="soft" onclick="showView('hub')">
+      Zum Menü
+    </button>
   </div>
 </div>
 
