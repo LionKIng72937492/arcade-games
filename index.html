@@ -18,55 +18,111 @@
       <button class="soft" onclick="showView('settings')" aria-label="Einstellungen">⚙</button>
     </div>
   </header>
+  
   <nav class="tabs">
     <button class="tab active" data-view="hub">Spiele</button>
     <button class="tab" data-view="shop">Shop</button>
     <button class="tab" data-view="leaderboard">Rangliste</button>
     <button class="tab" data-view="settings">Profil</button>
-    <button class="tab owner-tab" id="ownerTab" data-view="owner" style="display:none;">👑 Owner</button>
   </nav>
+
   <section class="view active" id="hub">
-    <div class="hero"><h1>Deine Arcade. Dein Fortschritt.</h1><p>10 framerate-unabhängige Minigames — optimiert für Desktop und iPad.</p></div>
+    <div class="hero">
+      <h1>Deine Arcade. Dein Fortschritt.</h1>
+      <p>10 framerate-unabhängige Minigames — optimiert für Desktop und iPad.</p>
+    </div>
     <div class="grid" id="games"></div>
   </section>
+
   <section class="view" id="shop">
-    <div class="hero"><h1>Upgrade Lab</h1><p>Erspiele unbegrenzt Coins durch Highscores und Siege. Skins, seltene Items und Effekte gehören zu deinem lokalen Profil.</p></div>
+    <div class="hero">
+      <h1>Upgrade Lab</h1>
+      <p>Erspiele unbegrenzt Coins durch Highscores und Siege. Skins, seltene Items und Effekte gehören zu deinem lokalen Profil.</p>
+    </div>
     <div class="shop" id="shoplist"></div>
   </section>
+
   <section class="view" id="leaderboard">
-    <div class="hero"><h1>Live Rangliste</h1><p>Echtzeit-Synchronisation mit Firebase Cloud Firestore.</p></div>
+    <div class="hero">
+      <h1>Live Rangliste</h1>
+      <p>Echtzeit-Synchronisation mit Firebase Cloud Firestore.</p>
+    </div>
     <div class="panel settings" style="max-width:100%;">
-      <div class="row"><span>Dein Spielername</span><input id="playerName" maxlength="18" placeholder="Dein Name" style="background:#16234c;border:1px solid var(--line);padding:9px;border-radius:9px;color:var(--ink);transition:0.2s opacity;"></div>
-      <div id="nameChangeHint" style="font-size:0.78rem; color:var(--muted); text-align:right; margin-top:-6px; margin-bottom:10px;">✏️ Namensänderung nur alle 7 Tage möglich.</div>
+      <div class="row">
+        <span>Dein Spielername</span>
+        <input id="playerName" maxlength="18" placeholder="Dein Name" style="background:#16234c;border:1px solid var(--line);padding:9px;border-radius:9px;color:var(--ink);transition:0.2s opacity;">
+      </div>
+      <div id="nameChangeHint" style="font-size:0.78rem; color:var(--muted); text-align:right; margin-top:-6px; margin-bottom:10px;">
+        ✏️ Namensänderung nur alle 7 Tage möglich.
+      </div>
+      
       <div class="lb-tabs" style="margin-top:15px;">
         <button class="soft active" id="btn-coins" onclick="switchCategory('coins')">🪙 Münzen</button>
         <button class="soft" id="btn-xp" onclick="switchCategory('xp')">⭐ XP</button>
         <button class="soft" id="btn-time" onclick="switchCategory('time')">⏱️ Spielzeit</button>
       </div>
-      <table class="lb-table"><thead><tr><th style="width:70px;">Rang</th><th>Spieler</th><th id="score-header">Münzen</th></tr></thead><tbody id="leaderboardRows"><tr><td colspan="3" style="text-align:center;">Lade Daten aus Firebase...</td></tr></tbody></table>
+
+      <table class="lb-table">
+        <thead>
+          <tr>
+            <th style="width:70px;">Rang</th>
+            <th>Spieler</th>
+            <th id="score-header">Münzen</th>
+          </tr>
+        </thead>
+        <tbody id="leaderboardRows">
+          <tr><td colspan="3" style="text-align:center;">Lade Daten aus Firebase...</td></tr>
+        </tbody>
+      </table>
     </div>
   </section>
+
   <section class="view" id="settings">
     <div class="panel settings">
       <h2>Profil & Einstellungen</h2>
-      <div class="row"><span>Sound-Effekte</span><button class="soft" id="soundBtn">An</button></div>
-      <div class="row"><span>Aktives Farbschema</span><select id="themeSelect"><option value="neon">Neon Blau</option><option value="violet">Violett</option><option value="mint">Mint</option><option value="amber">Amber</option></select></div>
-      <div class="row"><span>XP</span><b id="xp">0</b></div>
+      <div class="row">
+        <span>Sound-Effekte</span>
+        <button class="soft" id="soundBtn">An</button>
+      </div>
+      <div class="row">
+        <span>Aktives Farbschema</span>
+        <select id="themeSelect">
+          <option value="neon">Neon Blau</option>
+          <option value="violet">Violett</option>
+          <option value="mint">Mint</option>
+          <option value="amber">Amber</option>
+        </select>
+      </div>
+      <div class="row">
+        <span>XP</span>
+        <b id="xp">0</b>
+      </div>
       <button class="soft" id="reset">Fortschritt zurücksetzen</button>
     </div>
   </section>
-  <section class="view" id="owner" style="display:none;">
-    <div class="hero"><h1>👑 Owner Panel</h1><p>Nur für die Accounts „Asllan“ und „Asllan.“ sichtbar.</p></div>
-    <div id="ownerPanelContainer"></div>
-  </section>
+
   <section class="view" id="game">
-    <div class="gamebar"><button class="soft" onclick="showView('hub')">← Menü</button><h2 id="gameTitle">Spiel</h2><button class="soft" id="restart">↻ Neu</button></div>
-    <div class="panel gamearea"><div id="gameUI"></div></div>
+    <div class="gamebar">
+      <button class="soft" onclick="showView('hub')">← Menü</button>
+      <h2 id="gameTitle">Spiel</h2>
+      <button class="soft" id="restart">↻ Neu</button>
+    </div>
+    <div class="panel gamearea">
+      <div id="gameUI"></div>
+    </div>
   </section>
 </main>
+
 <div class="toast" id="toast"></div>
-<div class="modal" id="modal"><div class="panel"><h2 id="modalTitle">Runde vorbei</h2><p id="modalText"></p><button class="soft" id="modalRestart">Nochmal spielen</button><button class="soft" onclick="showView('hub')">Zum Menü</button></div></div>
+<div class="modal" id="modal">
+  <div class="panel">
+    <h2 id="modalTitle">Runde vorbei</h2>
+    <p id="modalText"></p>
+    <button class="soft" id="modalRestart">Nochmal spielen</button>
+    <button class="soft" onclick="showView('hub')">Zum Menü</button>
+  </div>
+</div>
+
 <script type="module" src="script.js"></script>
 </body>
 </html>
-
