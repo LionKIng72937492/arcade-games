@@ -52,7 +52,7 @@ table.lb-table th { background:rgba(0,0,0,0.3); color:var(--a); font-size:0.85re
   <section class="view" id="shop">
     <div class="hero">
       <h1>Upgrade Lab</h1>
-      <p>Neue Bestwerte bringen 2–8 Coins, der erste Tageslauf je Spiel 1 Coin. Das Tageslimit liegt bei 18 Coins. Skins, seltene Items und Effekte gehören zu deinem lokalen Profil.</p>
+      <p>Erspiele unbegrenzt Coins durch Highscores und Siege. Skins, seltene Items und Effekte gehören zu deinem lokalen Profil.</p>
     </div>
     <div class="shop" id="shoplist"></div>
   </section>
@@ -65,7 +65,10 @@ table.lb-table th { background:rgba(0,0,0,0.3); color:var(--a); font-size:0.85re
     <div class="panel settings" style="max-width:100%;">
       <div class="row">
         <span>Dein Spielername</span>
-        <input id="playerName" maxlength="18" placeholder="Dein Name" style="background:#16234c;border:1px solid var(--line);padding:9px;border-radius:9px;color:var(--ink)">
+        <input id="playerName" maxlength="18" placeholder="Dein Name" style="background:#16234c;border:1px solid var(--line);padding:9px;border-radius:9px;color:var(--ink);transition:0.2s opacity;">
+      </div>
+      <div id="nameChangeHint" style="font-size:0.78rem; color:var(--muted); text-align:right; margin-top:-6px; margin-bottom:10px;">
+        ✏️ Namensänderung nur alle 7 Tage möglich.
       </div>
       
       <div class="lb-tabs" style="margin-top:15px;">
@@ -138,7 +141,7 @@ table.lb-table th { background:rgba(0,0,0,0.3); color:var(--a); font-size:0.85re
 <!-- FIREBASE SDK INTEGRATION -->
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-app.js";
-  import { getFirestore, collection, onSnapshot, query, orderBy, limit } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
+  import { getFirestore, collection, onSnapshot, query, orderBy, limit, doc, setDoc } from "https://www.gstatic.com/firebasejs/10.8.0/firebase-firestore.js";
 
   const firebaseConfig = {
     apiKey: "AIzaSyCDZ3kR-o_x3Cwg3MJpib1vuDIrqv1lddA",
@@ -153,6 +156,26 @@ table.lb-table th { background:rgba(0,0,0,0.3); color:var(--a); font-size:0.85re
   const db = getFirestore(app);
 
   let currentCategory = 'coins';
+
+  // AUTOMATISCHES SPEICHERN IN FIREBASE (1 EINTRAG PRO GERÄT DURCH PLAYERID)
+  window.savePlayerToFirebase = async function() {
+    if (!window.save) return;
+    const name = window.save.playerName || "Anonym";
+    if (!name || name === "Du") return; 
+
+    try {
+      const playerRef = doc(db, "leaderboards", window.save.playerId);
+      await setDoc(playerRef, {
+        playerId: window.save.playerId,
+        playerName: name,
+        coins: window.save.coins || 0,
+        xp: window.save.xp || 0,
+        time: Math.floor((window.save.xp || 0) / 100)
+      }, { merge: true });
+    } catch(err) {
+      console.error("Fehler beim Speichern in Firestore:", err);
+    }
+  };
 
   window.switchCategory = function(cat) {
     currentCategory = cat;
@@ -229,9 +252,15 @@ table.lb-table th { background:rgba(0,0,0,0.3); color:var(--a); font-size:0.85re
 <script>
 'use strict';
 const KEY='neonArcade2026';
-const defaults={coins:0,xp:0,sound:true,theme:'neon',scores:{},unlocked:['theme-violet'],activeTrail:'base'};
+const defaults={coins:0,xp:0,sound:true,theme:'neon',scores:{},unlocked:['theme-violet'],activeTrail:'base',playerId:'',playerName:'',lastNameChange:0};
 let save;
 try{save={...defaults,...JSON.parse(localStorage.getItem(KEY)||'{}')};save.scores??={};save.unlocked??=[]}catch{save={...defaults}};
+
+// GERÄTE-ID GENERIEREN (1 ACCOUNT PRO GERÄT)
+if (!save.playerId) {
+  save.playerId = 'p_' + Math.random().toString(36).substring(2, 9) + Date.now().toString(36);
+}
+window.save = save;
 
 const $=s=>document.querySelector(s), clamp=(n,a,b)=>Math.max(a,Math.min(b,n));
 const games=[
@@ -248,7 +277,11 @@ const games=[
 ];
 
 if((save.scores.pong||0)>7){save.scores.pong=0;localStorage.setItem(KEY,JSON.stringify(save))}
-function persist(){localStorage.setItem(KEY,JSON.stringify(save));renderMeta()}
+function persist(){
+  localStorage.setItem(KEY,JSON.stringify(save));
+  renderMeta();
+  if(window.savePlayerToFirebase) window.savePlayerToFirebase();
+}
 function renderMeta(){
   $('#coins').textContent=save.coins;$('#xp').textContent=save.xp;$('#level').textContent=1+Math.floor(save.xp/1000);
   document.body.className=save.theme==='neon'?'':'theme-'+save.theme;
@@ -258,6 +291,7 @@ function toast(t){const e=$('#toast');e.textContent=t;e.classList.add('show');cl
 function sound(type='tap'){if(!save.sound||!window.AudioContext)return;const c=sound.c||(sound.c=new AudioContext()),o=c.createOscillator(),g=c.createGain();o.type=type==='win'?'triangle':'square';o.frequency.value=type==='win'?720:type==='lose'?110:420;g.gain.setValueAtTime(.045,c.currentTime);g.gain.exponentialRampToValueAtTime(.001,c.currentTime+.1);o.connect(g).connect(c.destination);o.start();o.stop(c.currentTime+.12)}
 function burst(x=innerWidth/2,y=innerHeight/2){for(let i=0;i<28;i++){let p=document.createElement('i');p.className='particle';p.style.left=x+'px';p.style.top=y+'px';p.style.background=i%2?'var(--a)':'var(--b)';p.style.setProperty('--x',(Math.random()*260-130)+'px');p.style.setProperty('--y',(Math.random()*-260+40)+'px');$('#particles').append(p);setTimeout(()=>p.remove(),1050)}}
 
+// BELOHNUNGEN UND MÜNZEN (KEIN TAGESLIMIT)
 function award(game,score,win=false){
   if(roundEnded)return;roundEnded=true;save.wins??={};
   let today=new Date().toISOString().slice(0,10);
@@ -267,9 +301,15 @@ function award(game,score,win=false){
   if(isNew){save.scores[game]=score;bonus=Math.min(8,2+Math.floor(Math.max(0,score)/300))}
   if(win&&!save.wins[game]){save.wins[game]=true;if(!isNew)bonus+=2}
   if(!save.dailyGames[game]){save.dailyGames[game]=true;if(!isNew&&!win)bonus+=1}
-  bonus=Math.min(bonus,Math.max(0,18-(save.dailyCoins||0)));
-  save.dailyCoins=(save.dailyCoins||0)+bonus;
-  if(bonus){save.coins+=bonus;save.xp+=bonus*2;toast(`${isNew?'Neuer Bestwert! · ':''}+${bonus} Coins`);burst();sound('win')}
+
+  // TAGESLIMIT ENTFERNT: Voller Münz-Gewinn wird direkt gutgeschrieben
+  if(bonus){
+    save.coins+=bonus;
+    save.xp+=bonus*2;
+    toast(`${isNew?'Neuer Bestwert! · ':''}+${bonus} Coins`);
+    burst();
+    sound('win');
+  }
   persist();renderGames();renderShop();
   if(window.renderLeaderboard) window.renderLeaderboard();
 }
@@ -313,6 +353,57 @@ function quitGame(){stop();active='';$('#modal').classList.remove('show');showVi
 $('#soundBtn').onclick=()=>{save.sound=!save.sound;persist()};
 $('#themeSelect').onchange=e=>{let t=e.target.value;if(t!=='neon'&&!save.unlocked.includes('theme-'+t)){toast('Dieses Theme zuerst im Shop freischalten.');e.target.value=save.theme;return}save.theme=t;persist()};
 $('#reset').onclick=()=>{if(confirm('Wirklich alle lokalen Fortschritte löschen?')){save={...defaults,scores:{},unlocked:['theme-violet']};persist();renderGames();toast('Fortschritt zurückgesetzt.')}};
+
+// 7-TAGE SPERRE FÜR DEN SPIELERNAME
+const pInput = $('#playerName');
+const SEVEN_DAYS = 7 * 24 * 60 * 60 * 1000;
+
+function updateNameInputUI() {
+  if (!pInput) return;
+  pInput.value = save.playerName || '';
+  const now = Date.now();
+  const timePassed = now - (save.lastNameChange || 0);
+  const nameHint = $('#nameChangeHint');
+  
+  if (save.playerName && timePassed < SEVEN_DAYS) {
+    const daysLeft = Math.ceil((SEVEN_DAYS - timePassed) / (1000 * 60 * 60 * 24));
+    pInput.disabled = true;
+    pInput.style.opacity = '0.5';
+    if (nameHint) nameHint.textContent = `🔒 Namensänderung gesperrt (wieder in ${daysLeft} Tag(en) möglich)`;
+  } else {
+    pInput.disabled = false;
+    pInput.style.opacity = '1';
+    if (nameHint) nameHint.textContent = `✏️ Namensänderung frei (nur alle 7 Tage möglich)`;
+  }
+}
+
+if(pInput) {
+  updateNameInputUI();
+  pInput.onchange = () => {
+    const newName = pInput.value.trim().slice(0,18);
+    if (!newName) {
+      pInput.value = save.playerName || '';
+      return;
+    }
+    const now = Date.now();
+    const timePassed = now - (save.lastNameChange || 0);
+    
+    if (save.playerName && save.playerName !== newName && timePassed < SEVEN_DAYS) {
+      const daysLeft = Math.ceil((SEVEN_DAYS - timePassed) / (1000 * 60 * 60 * 24));
+      toast(`Namensänderung erst in ${daysLeft} Tag(en) wieder möglich!`);
+      pInput.value = save.playerName;
+      return;
+    }
+
+    if (save.playerName !== newName) {
+      save.playerName = newName;
+      save.lastNameChange = now;
+      toast('Spielername gespeichert!');
+      persist();
+      updateNameInputUI();
+    }
+  };
+}
 
 let active='',raf=0,last=0,roundEnded=false,cleanup=()=>{};
 function stop(){cancelAnimationFrame(raf);cleanup();cleanup=()=>{};last=0}
