@@ -27,12 +27,12 @@ save.activeFont ??= 'font-default';
 save = { ...defaults };
 }
 
-// OWNER: echte Maximalwerte im lokalen Profil
+// OWNER: echte Maximalwerte beim ersten Anlegen eines Owner-Profils
 if (isOwnerName(save.playerName)) {
   save.playerId = ownerIdFor(save.playerName);
-  save.coins = OWNER_MAX;
-  save.xp = OWNER_MAX;
-  save.time = OWNER_MAX;
+  if (!Number.isFinite(Number(save.coins)) || Number(save.coins) === 0) save.coins = OWNER_MAX;
+  if (!Number.isFinite(Number(save.xp)) || Number(save.xp) === 0) save.xp = OWNER_MAX;
+  if (!Number.isFinite(Number(save.time)) || Number(save.time) === 0) save.time = OWNER_MAX;
 }// EIN ACCOUNT PRO GERÄT (EINDEUTIGE ID)
 if (!save.playerId) {
   save.playerId = isOwnerName(save.playerName) ? ownerIdFor(save.playerName) : 'p_' + Math.random().toString(36).substring(2, 9) + Date.now().toString(36);
@@ -44,17 +44,14 @@ const name = window.save.playerName || "Anonym";
 if (!name || name === "Du") return;try {
 if (isOwnerName(name)) {
   window.save.playerId = ownerIdFor(name);
-  window.save.coins = OWNER_MAX;
-  window.save.xp = OWNER_MAX;
-  window.save.time = OWNER_MAX;
 }
 const playerRef = doc(db, "leaderboards", window.save.playerId);
 await setDoc(playerRef, {
 playerId: window.save.playerId,
 playerName: name,
-coins: isOwnerName(name) ? OWNER_MAX : Number(window.save.coins || 0),
-xp: isOwnerName(name) ? OWNER_MAX : Number(window.save.xp || 0),
-time: isOwnerName(name) ? OWNER_MAX : Number(window.save.time || 0),
+coins: Number(window.save.coins || 0),
+xp: Number(window.save.xp || 0),
+time: Number(window.save.time || 0),
 activeBanner: window.save.activeBanner || 'banner-none',
 activeFont: window.save.activeFont || 'font-default',
 lastNameChange: window.save.lastNameChange || 0
@@ -73,15 +70,6 @@ function startPlayerRealtimeSync() {
   playerSyncUnsubscribe = onSnapshot(playerRef, (snapshot) => {
     if (!snapshot.exists()) return;
     const data = snapshot.data();
-    if (isOwnerName(save.playerName)) {
-      save.coins = OWNER_MAX;
-      save.xp = OWNER_MAX;
-      save.time = OWNER_MAX;
-      localStorage.setItem(KEY, JSON.stringify(save));
-      renderMeta();
-      renderShop();
-      return;
-    }
     const remoteCoins = Number(data.coins ?? save.coins);
     const remoteXp = Number(data.xp ?? save.xp);
     const remoteTime = Number(data.time ?? save.time);
@@ -165,45 +153,34 @@ $('#soundBtn').textContent = save.sound ? 'An' : 'Aus';
 $('#themeSelect').value = save.theme;// Überprüfen, ob das Owner Panel angezeigt werden soll (Nur wenn der Spieler-Name exakt dem Owner entspricht)
 checkOwnerPanelVisibility();
 }function checkOwnerPanelVisibility() {
-  const settingsView = $('#settings');
-  if (!settingsView) return;
-  let access = $('#ownerAccess');
-  let ownerContainer = $('#ownerPanelContainer');
-  if (!access) {
-    access = document.createElement('div');
-    access.id = 'ownerAccess';
-    settingsView.appendChild(access);
-  }
-  access.innerHTML = `<button class="soft owner-access-btn" type="button">👑 Owner Panel öffnen</button>`;
-  if (!ownerContainer) {
-    ownerContainer = document.createElement('div');
-    ownerContainer.id = 'ownerPanelContainer';
-    ownerContainer.style.display = 'none';
-    settingsView.appendChild(ownerContainer);
-  }
+  const ownerTab = $('#ownerTab');
+  const ownerView = $('#ownerView');
+  const ownerContainer = $('#ownerPanelContainer');
   const isOwner = isOwnerName(save.playerName);
-  const accessButton = access.querySelector('button');
-  if (accessButton) accessButton.onclick = () => {
-    if (!isOwnerName(save.playerName)) return toast('Nur für Owner verfügbar.');
-    ownerContainer.style.display = ownerContainer.style.display === 'none' ? 'block' : 'none';
-  };
-  access.style.display = isOwner ? 'block' : 'none';
+  if (!ownerTab || !ownerView || !ownerContainer) return;
+
+  ownerTab.style.display = isOwner ? 'inline-flex' : 'none';
+  ownerView.style.display = isOwner ? '' : 'none';
+
   if (!isOwner) {
-    ownerContainer.style.display = 'none';
+    ownerContainer.innerHTML = '';
     return;
   }
+
   ownerContainer.innerHTML = `
     <div class="panel owner-panel">
       <div class="owner-panel-title">👑 Owner Admin Panel</div>
-      <p class="muted">Echte Firebase-Werte für Spieler vergeben.</p>
+      <p class="muted">Echte Firebase-Werte verwalten. Änderungen werden dauerhaft gespeichert.</p>
       <div class="owner-grid">
         <input type="text" id="opTargetName" placeholder="Exakter Spielername" autocomplete="off">
         <select id="opStatType"><option value="coins">🪙 Münzen</option><option value="xp">⭐ XP</option><option value="time">⏱️ Spielstunden</option></select>
         <input type="number" id="opAmount" min="1" step="1" value="100" placeholder="Anzahl">
-        <button class="buy owner-give" onclick="executeOwnerAction()">Wert vergeben</button>
+        <button class="buy owner-give" id="ownerGiveBtn" type="button">Wert vergeben</button>
       </div>
-      <div class="owner-note">Änderungen werden direkt in Firestore gespeichert.</div>
+      <div class="owner-note">Owner: ${save.playerName} · Max-Startwerte: 999.999</div>
     </div>`;
+
+  $('#ownerGiveBtn').onclick = executeOwnerAction;
 }
 
 async function executeOwnerAction() {
@@ -329,18 +306,20 @@ toast(newPurchase ? 'Gekauft und ausgerüstet!' : 'Item ausgerüstet.');
 persist();
 renderShop();
 }
-window.equip = equip;document.querySelectorAll('.tab').forEach(b => b.onclick = () => showView(b.dataset.view));function showView(v) {
-if (v !== 'game' && active && $('#game').classList.contains('active')) quitGame(); else stop();
+window.equip = equip;document.querySelectorAll('.tab').forEach(b => b.onclick = () => showView(b.dataset.view));
+checkOwnerPanelVisibility();function showView(v) {
+if (v !== 'game') { stop(); active = ''; roundEnded = false; } else { stop(); }
 $('.modal').classList.remove('show');
 document.querySelectorAll('.view').forEach(x => x.classList.toggle('active', x.id === v));
 document.querySelectorAll('.tab').forEach(x => x.classList.toggle('active', x.dataset.view === v));
 if (v === 'hub') renderGames();
 if (v === 'shop') renderShop();
 if (v === 'settings') renderMeta();
+if (v === 'owner') { checkOwnerPanelVisibility(); }
 if (v === 'leaderboard') renderLeaderboard();
 window.scrollTo(0, 0);
 }
-window.showView = showView;function quitGame() { stop(); active = ''; $('#modal').classList.remove('show'); showView('hub'); }$('#soundBtn').onclick = () => { save.sound = !save.sound; persist(); };
+window.showView = showView;function quitGame() { stop(); active = ''; roundEnded = false; $('#modal').classList.remove('show'); }$('#soundBtn').onclick = () => { save.sound = !save.sound; persist(); };
 $('#themeSelect').onchange = e => {
 let t = e.target.value;
 if (t !== 'neon' && !save.unlocked.includes('theme-' + t)) {
@@ -377,8 +356,11 @@ let newName = pInput.value.trim().slice(0, 18);
 if (!newName || newName === save.playerName) {
 pInput.value = save.playerName || '';
 return;
-}if (isOwnerName(newName) && save.playerId !== 'owner_override_pc') {
-  // Optional: Du kannst hier auch prüfen ob es der Admin-PC ist, aber über den Namen allein reicht es oft schon.
+}if (isOwnerName(newName)) {
+  save.playerId = ownerIdFor(newName);
+  save.coins = OWNER_MAX;
+  save.xp = OWNER_MAX;
+  save.time = OWNER_MAX;
 }
 
 try {
@@ -901,5 +883,6 @@ hud(`HERZEN: <b>${'❤️'.repeat(lives)}</b> (${lives}/5) · SCORE <b>${score}<
 });
 }renderMeta();
 renderShop();
+checkOwnerPanelVisibility();
 if (isOwnerName(save.playerName)) savePlayerToFirebase();
 renderGames();
