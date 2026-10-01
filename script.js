@@ -15,7 +15,7 @@ const app = initializeApp(firebaseConfig);
 const db = getFirestore(app);
 
 // HIER KANNST DU DEN OWNER-NAMEN ÄNDERN:
-const OWNER_NAME = "LionKIng72937492";
+const OWNER_NAME = "Asllan";
 
 let currentCategory = 'coins';
 
