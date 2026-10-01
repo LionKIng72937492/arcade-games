@@ -496,3 +496,30 @@ table.lb-table th { background: rgba(0,0,0,0.3); color: var(--a); font-size: 0.8
 .rank-3 { color: #d97706; font-weight: bold; }
 .score-val { font-family: monospace; color: var(--a); font-weight: bold; }
 .lb-tabs { display: flex; gap: 8px; margin-bottom: 12px; }
+
+/* Custom Modus-Auswahl Buttons für Pong */
+.mode-select-box {
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  align-items: center;
+  justify-content: center;
+  min-height: 350px;
+}
+.mode-btn {
+  width: 220px;
+  padding: 14px 20px;
+  font-size: 1.1rem;
+  font-weight: 700;
+  border-radius: 14px;
+  background: var(--panel);
+  border: 1px solid var(--a);
+  color: var(--ink);
+  box-shadow: 0 0 15px rgba(85, 230, 255, 0.25);
+  transition: 0.2s transform, 0.2s background, 0.2s box-shadow;
+}
+.mode-btn:hover {
+  transform: translateY(-2px) scale(1.03);
+  background: #29366a;
+  box-shadow: 0 0 25px rgba(85, 230, 255, 0.45);
+}
