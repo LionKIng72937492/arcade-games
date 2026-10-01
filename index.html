@@ -23,6 +23,7 @@
     <button class="tab" data-view="shop">Shop</button>
     <button class="tab" data-view="leaderboard">Rangliste</button>
     <button class="tab" data-view="settings">Profil</button>
+    <button class="tab owner-tab" id="ownerTab" data-view="owner" style="display:none;">👑 Owner</button>
   </nav>
   <section class="view active" id="hub">
     <div class="hero"><h1>Deine Arcade. Dein Fortschritt.</h1><p>10 framerate-unabhängige Minigames — optimiert für Desktop und iPad.</p></div>
@@ -52,9 +53,11 @@
       <div class="row"><span>Aktives Farbschema</span><select id="themeSelect"><option value="neon">Neon Blau</option><option value="violet">Violett</option><option value="mint">Mint</option><option value="amber">Amber</option></select></div>
       <div class="row"><span>XP</span><b id="xp">0</b></div>
       <button class="soft" id="reset">Fortschritt zurücksetzen</button>
-      <div id="ownerAccess"></div>
-      <div id="ownerPanelContainer" style="display:none;"></div>
     </div>
+  </section>
+  <section class="view" id="owner" style="display:none;">
+    <div class="hero"><h1>👑 Owner Panel</h1><p>Nur für die Accounts „Asllan“ und „Asllan.“ sichtbar.</p></div>
+    <div id="ownerPanelContainer"></div>
   </section>
   <section class="view" id="game">
     <div class="gamebar"><button class="soft" onclick="showView('hub')">← Menü</button><h2 id="gameTitle">Spiel</h2><button class="soft" id="restart">↻ Neu</button></div>
