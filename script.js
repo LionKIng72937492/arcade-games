@@ -397,7 +397,6 @@ function snake() {
     s.unshift(h);
     if (h.x === food.x && h.y === food.y) { score += 10; spawn(); sound('win'); } else s.pop();
   }
-  // Intervall von 0.115s auf 0.145s erhöht für etwas langsamere Geschwindigkeit
   loop(dt => { acc += dt; while (acc > .145) { acc -= .145; step(); } }, () => {
     x.fillStyle = '#050713'; x.fillRect(0, 0, 400, 400);
     x.fillStyle = '#ff6386'; x.fillRect(food.x * 20 + 3, food.y * 20 + 3, 14, 14);
@@ -431,18 +430,15 @@ function tetris() {
   });
   loop(dt => { acc += dt; let speed = Math.max(.13, .72 - score / 3500); while (acc > speed) { acc -= speed; drop(); } }, () => {
     x.fillStyle = '#060917'; x.fillRect(0, 0, 300, 600);
-    // Dezenter Arcade-Rasterhintergrund
     x.strokeStyle = 'rgba(85, 230, 255, 0.05)'; x.lineWidth = 1;
     for (let gx = 0; gx <= 300; gx += 30) { x.beginPath(); x.moveTo(gx, 0); x.lineTo(gx, 600); x.stroke(); }
     for (let gy = 0; gy <= 600; gy += 30) { x.beginPath(); x.moveTo(0, gy); x.lineTo(300, gy); x.stroke(); }
     
-    // Platziertes Spielfeld mit leichtem Glow
     x.shadowBlur = 8;
     B.forEach((r, y) => r.forEach((v, z) => {
       if (v) { x.fillStyle = v; x.shadowColor = v; x.fillRect(z * 30 + 1, y * 30 + 1, 28, 28); }
     }));
     
-    // Aktive Tetris-Kachel mit intensivem Glow
     x.fillStyle = p.col; x.shadowColor = p.col; x.shadowBlur = 12;
     p.m.forEach((r, y) => r.forEach((v, z) => v && x.fillRect((p.x + z) * 30 + 1, (p.y + y) * 30 + 1, 28, 28)));
     x.shadowBlur = 0;
@@ -461,7 +457,7 @@ function space() {
     if (shootCooldown > 0) return;
     shots.push({ x: px, y: 455 });
     sound();
-    shootCooldown = boostTimer > 0 ? 0.12 : 0.25; // 2x Schussgeschwindigkeit bei Powerup
+    shootCooldown = boostTimer > 0 ? 0.12 : 0.25;
   }
 
   bind(k => {
@@ -479,12 +475,11 @@ function space() {
     if (boostTimer > 0) boostTimer -= dt;
     if (baseHitFlash > 0) baseHitFlash -= dt;
 
-    // Kontrolliertes Gegner-Spawnsystem
     acc += dt;
     let spawnRate = Math.max(0.75, 1.6 - Math.floor(score / 100) * 0.1);
     if (acc > spawnRate) {
       acc = 0;
-      if (enemies.length < 6) { // Max 6 Gegner gleichzeitig für faire Balance
+      if (enemies.length < 6) {
         enemies.push({ x: 20 + Math.random() * 350, y: -25, v: 50 + score * 0.3 });
       }
     }
@@ -493,13 +488,11 @@ function space() {
     enemies.forEach(q => q.y += q.v * dt);
     powerups.forEach(p => p.y += 80 * dt);
 
-    // Explosionspartikel aktualisieren
     for (let i = explosions.length - 1; i >= 0; i--) {
       let ex = explosions[i]; ex.y += ex.vy * dt; ex.x += ex.vx * dt; ex.life -= dt * 2.5;
       if (ex.life <= 0) explosions.splice(i, 1);
     }
 
-    // Powerup Aufsammeln
     for (let i = powerups.length - 1; i >= 0; i--) {
       let p = powerups[i];
       if (Math.hypot(p.x - px, p.y - 480) < 25) {
@@ -510,10 +503,8 @@ function space() {
       } else if (p.y > 520) powerups.splice(i, 1);
     }
 
-    // Kollisionen & Treffer
     for (let i = enemies.length - 1; i >= 0; i--) {
       let e = enemies[i];
-      // Gegner trifft Base am unteren Rand
       if (e.y > 470) {
         baseLives--;
         baseHitFlash = 0.35;
@@ -523,15 +514,12 @@ function space() {
         continue;
       }
 
-      // Treffer durch Spielerschuss
       for (let j = shots.length - 1; j >= 0; j--) {
         if (Math.abs(shots[j].x - e.x) < 20 && Math.abs(shots[j].y - e.y) < 24) {
-          // Partikel-Explosion erzeugen
           for (let k = 0; k < 6; k++) {
             explosions.push({ x: e.x, y: e.y, vx: (Math.random() - 0.5) * 120, vy: (Math.random() - 0.5) * 120, life: 1, c: k % 2 ? '#ff6386' : '#ffe063' });
           }
           
-          // Kontrollierte Power-Up Spawns (Speed: ~15%, Extra-Leben: sehr selten ~3%)
           let r = Math.random();
           if (r < 0.03) powerups.push({ x: e.x, y: e.y, type: 'life' });
           else if (r < 0.18) powerups.push({ x: e.x, y: e.y, type: 'speed' });
@@ -551,7 +539,6 @@ function space() {
     x.fillStyle = '#030511'; x.fillRect(0, 0, 400, 520);
     x.fillStyle = '#fff'; for (let i = 0; i < 38; i++) x.fillRect((i * 71) % 400, (i * 113) % 520, 1, 1);
 
-    // Rote Base-Treffer Warnanzeige
     if (baseLives <= 3) {
       x.fillStyle = 'rgba(255, 99, 134, ' + (0.15 + Math.sin(Date.now() / 200) * 0.1) + ')';
       x.fillRect(0, 460, 400, 60);
@@ -561,16 +548,13 @@ function space() {
       x.fillRect(0, 0, 400, 520);
     }
 
-    // Raumschiff des Spielers
     x.fillStyle = boostTimer > 0 ? '#55e6ff' : '#162c59';
     x.beginPath(); x.moveTo(px, 458); x.lineTo(px - 24, 496); x.lineTo(px - 10, 488); x.lineTo(px, 500); x.lineTo(px + 10, 488); x.lineTo(px + 24, 496); x.closePath(); x.fill();
     x.strokeStyle = '#55e6ff'; x.lineWidth = 2; x.shadowColor = '#55e6ff'; x.shadowBlur = boostTimer > 0 ? 18 : 8; x.stroke(); x.shadowBlur = 0;
 
-    // Schüsse
     x.fillStyle = boostTimer > 0 ? '#72ffae' : '#ffe063';
     shots.forEach(q => x.fillRect(q.x - 2, q.y, 4, 12));
 
-    // Power-Up Orbs zeichnen
     powerups.forEach(p => {
       x.beginPath(); x.arc(p.x, p.y, 9, 0, Math.PI * 2);
       x.fillStyle = p.type === 'life' ? '#72ffae' : '#55e6ff';
@@ -579,14 +563,12 @@ function space() {
       x.fillText(p.type === 'life' ? '❤️' : '⚡', p.x, p.y + 3);
     });
 
-    // Explosionspartikel zeichnen
     explosions.forEach(ex => {
       x.fillStyle = ex.c; x.globalAlpha = ex.life;
       x.fillRect(ex.x, ex.y, 3, 3);
       x.globalAlpha = 1;
     });
 
-    // Gegner
     x.fillStyle = '#ff6386';
     enemies.forEach(q => {
       x.beginPath(); x.moveTo(q.x, q.y - 12); x.lineTo(q.x + 16, q.y); x.lineTo(q.x + 11, q.y + 12); x.lineTo(q.x - 11, q.y + 12); x.lineTo(q.x - 16, q.y); x.closePath(); x.fill();
@@ -597,7 +579,7 @@ function space() {
   });
 }
 
-// 4. PONG (Modusauswahl: 1v1 vs. Verbesserte KI)
+// 4. PONG (Modusauswahl: 1v1 vs. KI)
 function pong() {
   $('#gameUI').innerHTML = `
     <div class="mode-select-box" id="pongModeSelect">
@@ -643,7 +625,6 @@ function pong() {
     loop(dt => {
       py = clamp(py, 0, 440);
 
-      // KI-Steuerung (Intelligentere vorausschauende Nachführung)
       if (!isMultiplayer) {
         let targetY = b.y - 40 + (b.vx > 0 ? (b.vy * 0.15) : 0);
         ai = clamp(ai + (targetY - ai) * dt * 5.2, 0, 440);
@@ -675,7 +656,68 @@ function pong() {
 
 function game2048() { let b = Array.from({ length: 4 }, () => Array(4).fill(0)), score = 0; function add() { let z = []; b.forEach((r, y) => r.forEach((v, x) => !v && z.push([y, x]))); if (z.length) { let [y, x] = z[Math.random() * z.length | 0]; b[y][x] = Math.random() < .9 ? 2 : 4; } } function slide(a) { let q = a.filter(Boolean), out = []; for (let i = 0; i < q.length; i++) { if (q[i] === q[i + 1]) { let v = q[i] * 2; out.push(v); score += v; i++; } else out.push(q[i]); } return out.concat(Array(4 - out.length).fill(0)); } function stuck() { return b.every((r, y) => r.every((v, x) => v && (x === 3 || v !== r[x + 1]) && (y === 3 || v !== b[y + 1][x]))); } function move(k) { let old = JSON.stringify(b); if (k === 'ArrowLeft') b = b.map(slide); if (k === 'ArrowRight') b = b.map(r => slide(r.reverse()).reverse()); if (k === 'ArrowUp' || k === 'ArrowDown') { for (let x = 0; x < 4; x++) { let col = b.map(r => r[x]); if (k === 'ArrowDown') col.reverse(); col = slide(col); if (k === 'ArrowDown') col.reverse(); col.forEach((v, y) => b[y][x] = v); } } if (old !== JSON.stringify(b)) { add(); sound(); render(); if (b.flat().includes(2048)) end('2048 erreicht!', `Score: ${score}`, score, true); else if (b.flat().every(Boolean) && stuck()) end('Keine Züge mehr', `Score: ${score}`, score); } else if (b.flat().every(Boolean) && stuck()) end('Keine Züge mehr', `Score: ${score}`, score); } function render() { $('#gameUI').innerHTML = `<div class="hud">SCORE <b>${score}</b> · BEST <b>${scoreText('2048')}</b></div><div class="board b4" id="b2048"></div><p class="muted" style="text-align:center">Wische oder nutze die Pfeiltasten.</p>`; let colors = { 2: '#1d356a', 4: '#254b82', 8: '#3268a5', 16: '#8354c3', 32: '#b454b0', 64: '#dc597e', 128: '#e88853', 256: '#edb94f', 512: '#eff06a', 1024: '#a6f47b', 2048: '#69ffd2' }; let grid = $('#b2048'); grid.innerHTML = b.flat().map(v => `<div class="tile" style="background:${v ? colors[v] || '#fff' : 'var(--tile)'};color:${v ? '#071125' : 'inherit'}">${v || ''}</div>`).join(''); } add(); add(); render(); bind(move); }
 
-function ttt() { let b = Array(9).fill(''), turn = 'X', score = 0; function win(p) { return [[0, 1, 2], [3, 4, 5], [6, 7, 8], [0, 3, 6], [1, 4, 7], [2, 5, 8], [0, 4, 8], [2, 4, 6]].some(c => c.every(i => p[i] === turn)); } function ai() { let empty = b.map((v, i) => v === '' ? i : null).filter(v => v !== null); if (!empty.length) return; let pick = empty[Math.random() * empty.length | 0]; b[pick] = 'O'; if (win(b)) { render(); end('KI gewinnt', `Match beendet.`, score); return; } turn = 'X'; render(); } function click(i) { if (b[i] || turn !== 'X' || roundEnded) return; b[i] = 'X'; sound(); if (win(b)) { score = 100; render(); end('Sieg!', `Du hast die KI besiegt!`, score, true); return; } if (b.every(Boolean)) { render(); end('Unentschieden', `Kein Sieger.`, score); return; } turn = 'O'; render(); setTimeout(ai, 300); } function render() { $('#gameUI').innerHTML = `<div class="hud">SPIELER (X) vs KI (O) · BEST <b>${scoreText('ttt')}</b></div><div class="board ttt">${b.map((v, i) => `<button class="${v.toLowerCase()}" onclick="tttClick(${i})">${v}</button>`).join('')}</div>`; window.tttClick = click; } render(); }
+// TIC-TAC-TOE (Modusauswahl: 1v1 vs. KI)
+function ttt() {
+  $('#gameUI').innerHTML = `
+    <div class="mode-select-box" id="tttModeSelect">
+      <h3 style="color:var(--a); margin-bottom:10px;">Spielmodus wählen</h3>
+      <button class="mode-btn" id="btnTttAI">🤖 Gegen KI</button>
+      <button class="mode-btn" id="btnTtt1v1">🎮 1 gegen 1 (Lokal)</button>
+    </div>
+  `;
+
+  $('#btnTttAI').onclick = () => startTTTGame(false);
+  $('#btnTtt1v1').onclick = () => startTTTGame(true);
+
+  function startTTTGame(isMultiplayer) {
+    let b = Array(9).fill(''), turn = 'X', score = 0;
+
+    function win(p) {
+      return [[0, 1, 2], [3, 4, 5], [6, 7, 8], [0, 3, 6], [1, 4, 7], [2, 5, 8], [0, 4, 8], [2, 4, 6]].some(c => c.every(i => p[i] === turn));
+    }
+
+    function ai() {
+      let empty = b.map((v, i) => v === '' ? i : null).filter(v => v !== null);
+      if (!empty.length) return;
+      let pick = empty[Math.random() * empty.length | 0];
+      b[pick] = 'O';
+      if (win(b)) { render(); end('KI gewinnt', `Match beendet.`, score); return; }
+      if (b.every(Boolean)) { render(); end('Unentschieden', `Kein Sieger.`, score); return; }
+      turn = 'X';
+      render();
+    }
+
+    function click(i) {
+      if (b[i] || roundEnded) return;
+      if (!isMultiplayer && turn !== 'X') return;
+
+      b[i] = turn;
+      sound();
+
+      if (win(b)) {
+        score = 100; render();
+        let winnerName = isMultiplayer ? `Spieler (${turn})` : (turn === 'X' ? 'Du' : 'KI');
+        end(`${winnerName} gewinnt!`, `Match beendet.`, score, turn === 'X' || isMultiplayer);
+        return;
+      }
+      if (b.every(Boolean)) { render(); end('Unentschieden', `Kein Sieger.`, score); return; }
+
+      turn = turn === 'X' ? 'O' : 'X';
+      render();
+
+      if (!isMultiplayer && turn === 'O') {
+        setTimeout(ai, 300);
+      }
+    }
+
+    function render() {
+      let modeTitle = isMultiplayer ? 'SPIELER (X) vs SPIELER (O)' : 'SPIELER (X) vs KI (O)';
+      $('#gameUI').innerHTML = `<div class="hud">${modeTitle} · ZUG: <b>${turn}</b> · BEST <b>${scoreText('ttt')}</b></div><div class="board ttt">${b.map((v, i) => `<button class="${v.toLowerCase()}" onclick="tttClick(${i})">${v}</button>`).join('')}</div>`;
+      window.tttClick = click;
+    }
+    render();
+  }
+}
 
 function memory() { let icons = ['⚡', '🔥', '💎', '🚀', '🎮', '🎲', '🎯', '👾'], cards = [...icons, ...icons].sort(() => Math.random() - .5), open = [], matched = [], moves = 0; function click(i) { if (open.length >= 2 || open.includes(i) || matched.includes(i) || roundEnded) return; open.push(i); sound(); render(); if (open.length === 2) { moves++; let [a, b] = open; if (cards[a] === cards[b]) { matched.push(a, b); open = []; sound('win'); render(); if (matched.length === cards.length) { let score = Math.max(10, 200 - moves * 10); end('Geschafft!', `Gefunden in ${moves} Zügen.`, score, true); } } else setTimeout(() => { open = []; render(); }, 800); } } function render() { $('#gameUI').innerHTML = `<div class="hud">ZÜGE <b>${moves}</b> · BEST <b>${scoreText('memory')}</b></div><div class="board memory">${cards.map((c, i) => `<button class="${open.includes(i) || matched.includes(i) ? 'open' : ''}" onclick="memClick(${i})">${open.includes(i) || matched.includes(i) ? c : ''}</button>`).join('')}</div>`; window.memClick = click; } render(); }
 
@@ -684,23 +726,22 @@ function fruit() {
   let [c, x] = canvas(360, 520), fruits = [], score = 0, cooldown = 0,
     dropper = { x: 180 }, consecutiveSameCount = 0, lastType = -1;
 
-  // 7 Stufen mit verschiedenen Formen und Farben
   const types = [
-    { r: 14, c: '#ff6386', sides: 0, label: '●' },   // Stufe 0: Klein Kreis
-    { r: 20, c: '#55e6ff', sides: 0, label: '●' },   // Stufe 1: Kreis
-    { r: 28, c: '#ffe063', sides: 4, label: '■' },   // Stufe 2: Quadrat
-    { r: 36, c: '#72ffae', sides: 5, label: '⬟' },   // Stufe 3: Fünfeck
-    { r: 45, c: '#cb5cff', sides: 6, label: '⬢' },   // Stufe 4: Sechseck
-    { r: 56, c: '#ff9d70', sides: 8, label: '⯁' },   // Stufe 5: Achteck
-    { r: 68, c: '#75ffbe', sides: 0, label: '👑' }   // Stufe 6: Große Krone
+    { r: 14, c: '#ff6386', sides: 0, label: '●' },
+    { r: 20, c: '#55e6ff', sides: 0, label: '●' },
+    { r: 28, c: '#ffe063', sides: 4, label: '■' },
+    { r: 36, c: '#72ffae', sides: 5, label: '⬟' },
+    { r: 45, c: '#cb5cff', sides: 6, label: '⬢' },
+    { r: 56, c: '#ff9d70', sides: 8, label: '⯁' },
+    { r: 68, c: '#75ffbe', sides: 0, label: '👑' }
   ];
 
   function getNextType() {
-    let rolled = Math.floor(Math.random() * 3); // Zufällig aus Stufe 0, 1 oder 2
+    let rolled = Math.floor(Math.random() * 3);
     if (rolled === lastType) {
       consecutiveSameCount++;
       if (consecutiveSameCount >= 3) {
-        rolled = 2; // Automatisch etwas größere Form wählen bei zu vielen Wiederholungen
+        rolled = 2;
         consecutiveSameCount = 0;
       }
     } else {
@@ -716,7 +757,7 @@ function fruit() {
     if (cooldown > 0 || roundEnded) return;
     fruits.push({ x: dropper.x, y: 70, vx: 0, vy: 120, type: nextType });
     sound();
-    cooldown = 1.3; // ~1.3 Sekunden Drop-Cooldown
+    cooldown = 1.3;
     nextType = getNextType();
   }
 
@@ -728,21 +769,18 @@ function fruit() {
   loop(dt => {
     if (cooldown > 0) cooldown -= dt;
 
-    // Physikalische Bewegung & Gravitation
     fruits.forEach(f => {
       f.vy += 380 * dt;
       f.x += f.vx * dt;
       f.y += f.vy * dt;
-      f.vx *= 0.96; // Reibung
+      f.vx *= 0.96;
 
-      // Glas-Grenzen (Container)
       let r = types[f.type].r;
       if (f.x < 35 + r) { f.x = 35 + r; f.vx = Math.abs(f.vx) * 0.3; }
       if (f.x > 325 - r) { f.x = 325 - r; f.vx = -Math.abs(f.vx) * 0.3; }
       if (f.y > 480 - r) { f.y = 480 - r; f.vy = 0; f.vx *= 0.8; }
     });
 
-    // Stabile Kollision & Zusammenfügen (Merge)
     for (let i = 0; i < fruits.length; i++) {
       for (let j = i + 1; j < fruits.length; j++) {
         let a = fruits[i], b = fruits[j], dx = b.x - a.x, dy = b.y - a.y,
@@ -756,7 +794,6 @@ function fruit() {
             sound('win');
             break;
           } else {
-            // Physikalische Positionskorrektur (Verhindert Durchdringen)
             let overlap = minDist - dist;
             let nx = dx / (dist || 1), ny = dy / (dist || 1);
             a.x -= nx * overlap * 0.5; a.y -= ny * overlap * 0.5;
@@ -766,22 +803,18 @@ function fruit() {
       }
     }
 
-    // Verlust-Linie Prüfung (Verlust, wenn über der Linie gestapelt)
     let overflow = fruits.some(f => f.y - types[f.type].r < 100 && Math.abs(f.vy) < 10);
     if (overflow && cooldown <= 0) return end('Glas überfüllt!', `Score: ${score}`, score);
   }, () => {
     x.fillStyle = '#050713'; x.fillRect(0, 0, 360, 520);
 
-    // Glas Container Zeichnen
     x.strokeStyle = 'rgba(123, 198, 255, 0.4)'; x.lineWidth = 4;
     x.strokeRect(30, 90, 300, 400);
     x.fillStyle = 'rgba(18, 24, 51, 0.35)'; x.fillRect(30, 90, 300, 400);
 
-    // Gestrichelte weiße Verlust-Linie
     x.strokeStyle = 'rgba(255, 255, 255, 0.6)'; x.lineWidth = 2; x.setLineDash([6, 6]);
     x.beginPath(); x.moveTo(30, 110); x.lineTo(330, 110); x.stroke(); x.setLineDash([]);
 
-    // Formen/Früchte Zeichnen
     fruits.forEach(f => {
       let t = types[f.type];
       x.fillStyle = t.c; x.shadowColor = t.c; x.shadowBlur = 10;
@@ -802,7 +835,6 @@ function fruit() {
       x.fillText(t.label, f.x, f.y + 4);
     });
 
-    // Vorschau des nächsten Balls mit Drop-Abstand
     let previewType = types[nextType];
     x.fillStyle = previewType.c; x.globalAlpha = cooldown > 0 ? 0.3 : 0.85;
     x.beginPath(); x.arc(dropper.x, 50, previewType.r * 0.7, 0, Math.PI * 2); x.fill(); x.globalAlpha = 1;
@@ -822,13 +854,13 @@ function rhythm() {
 
     if (hitIndex !== -1) {
       let diff = Math.abs(notes[hitIndex].y - 420);
-      if (diff <= 14) { // Perfekter Treffer
+      if (diff <= 14) {
         score += 30;
         feedbackText = 'PERFEKT!';
         feedbackColor = '#ffe063';
         burst(innerWidth / 2, innerHeight / 2 - 20);
         sound('win');
-      } else { // Guter Treffer innerhalb der Toleranz
+      } else {
         score += 15;
         feedbackText = 'GUT!';
         feedbackColor = '#72ffae';
@@ -836,7 +868,7 @@ function rhythm() {
       }
       feedbackTimer = 0.6;
       notes.splice(hitIndex, 1);
-    } else if (isKeyTrigger) { // Leertaste zu früh/falsch gedrückt
+    } else if (isKeyTrigger) {
       lives--;
       feedbackText = 'FEHLER!';
       feedbackColor = '#ff6386';
@@ -859,7 +891,6 @@ function rhythm() {
 
     notes.forEach(n => n.y += 230 * dt);
 
-    // Verpasster Beat
     for (let i = notes.length - 1; i >= 0; i--) {
       if (notes[i].y > 465) {
         notes.splice(i, 1);
@@ -874,12 +905,10 @@ function rhythm() {
   }, () => {
     x.fillStyle = '#050713'; x.fillRect(0, 0, 360, 500);
 
-    // Zielbereich (Hit-Zone) mit Glow
     x.fillStyle = 'rgba(22, 40, 88, 0.8)'; x.fillRect(0, 405, 360, 30);
     x.strokeStyle = '#55e6ff'; x.lineWidth = 2; x.shadowColor = '#55e6ff'; x.shadowBlur = 10;
     x.strokeRect(0, 405, 360, 30); x.shadowBlur = 0;
 
-    // Beats (Fallende Noten)
     x.fillStyle = '#55e6ff';
     notes.forEach(n => {
       x.shadowColor = '#55e6ff'; x.shadowBlur = 8;
@@ -887,7 +916,6 @@ function rhythm() {
     });
     x.shadowBlur = 0;
 
-    // "PERFEKT!" & Treffer-Feedback Text unter dem Trefferbereich
     if (feedbackTimer > 0) {
       x.fillStyle = feedbackColor; x.font = 'bold 22px system-ui'; x.textAlign = 'center';
       x.shadowColor = feedbackColor; x.shadowBlur = 12;
