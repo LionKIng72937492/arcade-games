@@ -229,7 +229,7 @@ function scoreText(id) { return save.scores[id] || 0; }
 
 function renderGames() {
   $('#games').innerHTML = games.map(([id, icon, name, desc], i) =>
-    `<button class="card" style="--glow:${['#55e6ff', '#bb6cff', '#ffb257', '#ff6d91'][i \% 4]}" onclick="launch('${id}')"><div class="icon">${icon}</div><h3>${name}</h3><p>${desc}</p><footer>BESTWERT <strong>${scoreText(id)}</strong> · SPIELEN →</footer></button>`
+ <button class="card" style="--glow:${['#55e6ff', '#bb6cff', '#ffb257', '#ff6d91'][i % 4]}" onclick="launch('${id}')"><div class="icon">${icon}</div><h3>${name}</h3><p>${desc}</p><footer>BESTWERT <strong>${scoreText(id)}</strong> · SPIELEN →</footer></button>
   ).join('');
 }
 
